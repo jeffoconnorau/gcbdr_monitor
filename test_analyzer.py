@@ -162,6 +162,7 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(stats['resource_name'], 'vm1')
         self.assertEqual(stats['current_daily_change_gb'], 2.0) # Current
         self.assertEqual(stats['total_resource_size_gb'], 100.0) # 100 GiB
+        self.assertEqual(stats['backup_job_count'], 1)
 
     @patch('analyzer.fetch_backup_logs')
     @patch('analyzer.fetch_gce_instance_details')
