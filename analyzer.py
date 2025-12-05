@@ -373,19 +373,12 @@ def fetch_gce_instance_details(project_id, resource_name):
         target_zone = match.group(2)
         instance_name = match.group(3)
     else:
-        # Fallback: try to find just project and instance if zone is missing (unlikely for valid GCE paths)
-        # or if format is different.
-        # Try finding project at least
+        # Fallback: try to find just project and instance if zone is missing
         proj_match = re.search(r'projects/([^/]+)', resource_name)
         if proj_match:
             target_project = proj_match.group(1)
             
-        # If we couldn't parse instance name cleanly from a full path, 
-        # but resource_name looks like a path, we might have issues.
-        # But if resource_name IS the instance name, we use it as is.
         if '/' in instance_name and not match:
-             # It's a path but didn't match our regex. 
-             # Try to take the last component as instance name.
              instance_name = resource_name.split('/')[-1]
 
     logger.info(f"Fetching GCE details for: Project={target_project}, Zone={target_zone}, Instance={instance_name}")
@@ -399,11 +392,10 @@ def fetch_gce_instance_details(project_id, resource_name):
                 return _calculate_disk_size(instance)
             except Exception as e:
                 logger.warning(f"Failed to get instance {instance_name} in zone {target_zone}: {e}")
-                # Fallback to aggregated list if direct get fails (e.g. wrong zone in URL?)
+                # Fallback to aggregated list if direct get fails
                 pass
 
         # Use AggregatedList if zone is unknown or direct get failed
-        # This searches all zones in the TARGET project
         logger.info(f"Attempting AggregatedList for {instance_name} in project {target_project}")
         request = compute_v1.AggregatedListInstancesRequest(project=target_project)
         request.filter = f"name = {instance_name}"
