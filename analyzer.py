@@ -320,6 +320,13 @@ def analyze_backup_jobs(project_id, days=7):
             except Exception as e:
                 logger.warning(f"Failed to fetch GCE details for {res}: {e}")
 
+        # Calculate growth
+        growth_rate_pct = 0
+        if avg_daily_change_gb > 0:
+            growth_rate_pct = ((current_daily_change_gb - avg_daily_change_gb) / avg_daily_change_gb) * 100
+        elif current_daily_change_gb > 0:
+            growth_rate_pct = 100 # New resource or previously 0 change
+
         resource_stats_list.append({
             "resource_name": res,
             "resource_type": resource_type,
