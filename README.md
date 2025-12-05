@@ -9,6 +9,7 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     - Average Daily Change Rate (GB and %)
     - Current Daily Change Rate (GB and %)
     - Growth Rate % (Current vs Historical)
+    - Total Resource Size (GiB)
 - **Anomaly Detection**: Compares current job statistics against historical averages to identify outliers.
 - **Cloud Run Ready**: Designed to be deployed as a Cloud Run service.
 - **API Endpoint**: Exposes a simple HTTP endpoint to trigger analysis.

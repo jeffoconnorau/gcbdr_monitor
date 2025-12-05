@@ -129,6 +129,29 @@ def process_jobs(parsed_logs):
         
     return final_jobs
 
+    for res in all_resources:
+        h_data = history_stats.get(res, {})
+        c_data = current_stats.get(res, {})
+        
+        # Defaults
+        avg_daily_change_gb = h_data.get('avg_daily_change_gb', 0)
+        current_daily_change_gb = c_data.get('avg_daily_change_gb', 0)
+        current_daily_change_pct = c_data.get('avg_daily_change_pct', 0)
+        resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
+        
+        # Calculate average total size (prefer current, fallback to history)
+        # total_size_sum / count = avg_total_size_bytes
+        # We need to recalculate or extract it from stats if we want it exact
+        # Let's add avg_total_size_gb to calculate_statistics first? 
+        # Actually, calculate_statistics doesn't return it directly, let's add it there or compute here.
+        # Wait, calculate_statistics returns 'avg_daily_change_pct' which uses total size.
+        # Let's modify calculate_statistics to return avg_total_size_gb as well.
+        
+        # RE-READING calculate_statistics implementation in previous turn:
+        # It calculates avg_total_size but doesn't return it in the result dict.
+        # I need to modify calculate_statistics first.
+        pass
+
 def calculate_statistics(job_history):
     """
     Computes average change rate per resource.
@@ -165,6 +188,7 @@ def calculate_statistics(job_history):
                 'avg_bytes': avg_bytes,
                 'avg_daily_change_gb': avg_bytes / (1024 * 1024 * 1024),
                 'avg_daily_change_pct': avg_daily_change_pct,
+                'avg_total_size_gb': avg_total_size / (1024 * 1024 * 1024),
                 'resource_type': data['resource_type'],
                 'data_points': data['count']
             }
@@ -248,6 +272,9 @@ def analyze_backup_jobs(project_id, days=7):
         avg_daily_change_gb = h_data.get('avg_daily_change_gb', 0)
         current_daily_change_gb = c_data.get('avg_daily_change_gb', 0)
         current_daily_change_pct = c_data.get('avg_daily_change_pct', 0)
+        # Prefer current total size, fallback to history
+        total_resource_size_gb = c_data.get('avg_total_size_gb') or h_data.get('avg_total_size_gb') or 0
+        
         resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
         
         # Calculate growth
@@ -260,6 +287,7 @@ def analyze_backup_jobs(project_id, days=7):
         resource_stats_list.append({
             "resource_name": res,
             "resource_type": resource_type,
+            "total_resource_size_gb": round(total_resource_size_gb, 2),
             "avg_daily_change_gb": round(avg_daily_change_gb, 2),
             "current_daily_change_gb": round(current_daily_change_gb, 2),
             "current_daily_change_pct": round(current_daily_change_pct, 2),

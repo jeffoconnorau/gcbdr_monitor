@@ -139,6 +139,7 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(stats['avg_daily_change_gb'], 1.0) # Historical
         self.assertEqual(stats['current_daily_change_gb'], 2.0) # Current
         self.assertEqual(stats['growth_rate_pct'], 100.0) # 1GB -> 2GB = 100% growth
+        self.assertEqual(stats['total_resource_size_gb'], 100.0) # 100 GiB
 
 if __name__ == '__main__':
     unittest.main()
