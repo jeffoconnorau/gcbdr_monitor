@@ -45,10 +45,20 @@ def parse_job_data(entry):
     # Extract fields as per SQL query
     # Try to find total size for percentage calculation
     total_size_bytes = 0
+    
+    # Check top-level fields
     if payload.get('sourceResourceSizeBytes'):
         total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+    
+    # Check nested protectedResourceDetails if not found
+    if total_size_bytes == 0:
+        protected_details = payload.get('protectedResourceDetails', {})
+        if protected_details.get('sourceResourceSizeBytes'):
+            total_size_bytes = int(protected_details.get('sourceResourceSizeBytes'))
+        elif protected_details.get('usedStorageGib'):
+            total_size_bytes = int(float(protected_details.get('usedStorageGib')) * 1024 * 1024 * 1024)
 
     # Ensure incrementalBackupSizeGib is float
     inc_size_gib = float(payload.get('incrementalBackupSizeGib', 0))

@@ -67,7 +67,7 @@ class TestAnalyzer(unittest.TestCase):
         entry = Mock()
         entry.timestamp = datetime.now(timezone.utc)
         
-        # Case 1: Standard entry with total size
+        # Case 1: Standard entry with total size (top level)
         entry.payload = {
             'jobId': 'job-1',
             'jobStatus': 'SUCCESSFUL',
@@ -80,6 +80,19 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(data['bytes_transferred'], 1073741824) # 1 GiB
         self.assertEqual(data['total_resource_size_bytes'], 107374182400)
         self.assertEqual(data['sourceResourceName'], 'vm-1')
+
+        # Case 2: Nested protectedResourceDetails
+        entry.payload = {
+            'jobId': 'job-2',
+            'jobStatus': 'SUCCESSFUL',
+            'incrementalBackupSizeGib': 1,
+            'protectedResourceDetails': {
+                'sourceResourceSizeBytes': 53687091200 # 50 GiB
+            },
+            'sourceResourceName': 'vm-2'
+        }
+        data = parse_job_data(entry)
+        self.assertEqual(data['total_resource_size_bytes'], 53687091200)
 
     def test_process_jobs_deduplication(self):
         # Create multiple logs for same job
