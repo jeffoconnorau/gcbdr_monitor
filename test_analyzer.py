@@ -190,6 +190,8 @@ class TestAnalyzer(unittest.TestCase):
         stats = result['resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'projects/other-project/zones/us-west1-a/instances/vm-gce')
         self.assertEqual(stats['total_resource_size_gb'], 500.0)
+        # 1 GB change / 500 GB total = 0.2%
+        self.assertEqual(stats['current_daily_change_pct'], 0.2)
         
         # Verify fetch_gce_instance_details was called with correct args
         # Note: analyze_backup_jobs calls it with (project_id, resource_name)

@@ -321,6 +321,23 @@ def analyze_backup_jobs(project_id, days=7):
             except Exception as e:
                 logger.warning(f"Failed to fetch GCE details for {res}: {e}")
 
+        # Recalculate percentages if we have a valid total size (especially if it came from GCE)
+        if total_resource_size_gb > 0:
+            if current_daily_change_gb > 0:
+                current_daily_change_pct = (current_daily_change_gb / total_resource_size_gb) * 100
+            
+            # Also update historical average percentage if needed?
+            # The user asked about "current_daily_change_pct", but "average change rate" implies history too.
+            # Let's update the output structure to include a recalculated historical pct if we want, 
+            # but 'avg_daily_change_pct' comes from h_data.
+            # Let's just update the variables we are about to put in the list.
+            # We don't output 'avg_daily_change_pct' explicitly in the list below, 
+            # wait, we DO output it? No, we output 'avg_daily_change_gb'.
+            # Ah, we DON'T output 'avg_daily_change_pct' in the final list currently!
+            # We only output 'current_daily_change_pct'.
+            # Let's check the list append below.
+            pass
+
         # Calculate growth
         growth_rate_pct = 0
         if avg_daily_change_gb > 0:
