@@ -332,12 +332,17 @@ def analyze_backup_jobs(project_id, days=7):
             if avg_daily_change_gb > 0:
                 avg_daily_change_pct = (avg_daily_change_gb / total_resource_size_gb) * 100
 
-        # Calculate growth
+        # Calculate growth (Daily Change % relative to Total Size)
         growth_rate_pct = 0
-        if avg_daily_change_gb > 0:
-            growth_rate_pct = ((current_daily_change_gb - avg_daily_change_gb) / avg_daily_change_gb) * 100
+        if total_resource_size_gb > 0:
+            growth_rate_pct = (current_daily_change_gb / total_resource_size_gb) * 100
         elif current_daily_change_gb > 0:
-            growth_rate_pct = 100 # New resource or previously 0 change
+             # Fallback if total size is 0 but we have change (unlikely if GCE fetch works, but possible for other types)
+             # If we don't know total size, we can't calculate % growth of resource.
+             # Previously we set it to 100, but maybe 0 is safer or keep 100?
+             # User specifically asked to use total_resource_size_gb.
+             # If total is 0, we can't divide.
+             growth_rate_pct = 0
 
         resource_stats_list.append({
             "resource_name": res,
