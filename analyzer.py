@@ -289,15 +289,35 @@ def analyze_backup_jobs(project_id, days=7):
         # Prefer current total size, fallback to history
         total_resource_size_gb = c_data.get('avg_total_size_gb') or h_data.get('avg_total_size_gb') or 0
         
-        resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
-        
-        # Calculate growth
-        growth_rate_pct = 0
-        if avg_daily_change_gb > 0:
-            growth_rate_pct = ((current_daily_change_gb - avg_daily_change_gb) / avg_daily_change_gb) * 100
-        elif current_daily_change_gb > 0:
-            growth_rate_pct = 100 # New resource or previously 0 change
-            
+        # Fallback to GCE API if size is still 0 and it looks like a GCE instance
+        if total_resource_size_gb == 0 and resource_type == 'GCE_INSTANCE':
+            try:
+                # Assuming resource_name format: projects/{project}/zones/{zone}/instances/{instance}
+                # But log might have it as just the instance name or full path.
+                # Let's check what we have. The logs usually have 'sourceResourceName' which might be full path.
+                # If it's just name, we might need to guess or search (expensive).
+                # Let's assume it's a full path or we can construct it if we know the project/zone.
+                # Wait, the log 'sourceResourceName' is often just the instance name or a partial path.
+                # The 'resource_name' key in our stats comes from 'sourceResourceName'.
+                # Let's try to parse it.
+                
+                # We need a cache to avoid repeated calls
+                if not hasattr(analyze_backup_jobs, 'gce_cache'):
+                    analyze_backup_jobs.gce_cache = {}
+                
+                if res in analyze_backup_jobs.gce_cache:
+                    total_resource_size_gb = analyze_backup_jobs.gce_cache[res]
+                else:
+                    # We need to find a sample job to get more details if needed, 
+                    # but we only have the resource name here.
+                    # Let's try to fetch details.
+                    size_gb = fetch_gce_instance_details(project_id, res)
+                    if size_gb > 0:
+                        total_resource_size_gb = size_gb
+                        analyze_backup_jobs.gce_cache[res] = size_gb
+            except Exception as e:
+                logger.warning(f"Failed to fetch GCE details for {res}: {e}")
+
         resource_stats_list.append({
             "resource_name": res,
             "resource_type": resource_type,
@@ -319,3 +339,75 @@ def analyze_backup_jobs(project_id, days=7):
         "failed_count": len(failed_jobs),
         "other_count": len(other_jobs)
     }
+
+def fetch_gce_instance_details(project_id, resource_name):
+    """
+    Fetches instance details from GCE to get disk size.
+    resource_name might be a full path or just a name.
+    If it's just a name, we might need to search or we might fail if zone is unknown.
+    However, GCBDR logs usually contain full resource URL in some fields, 
+    but 'sourceResourceName' might be short.
+    Let's assume for now we can try to find it if we have zone info, 
+    but we don't strictly have zone here unless we extracted it earlier.
+    
+    Actually, let's try to use the AggregatedList to find the instance by name if we don't have zone.
+    Or if resource_name is a URL like projects/p/zones/z/instances/i, we parse it.
+    """
+    from google.cloud import compute_v1
+    
+    # Try to parse project/zone/instance from resource_name
+    # Format: //compute.googleapis.com/projects/{project}/zones/{zone}/instances/{instance}
+    # OR: projects/{project}/zones/{zone}/instances/{instance}
+    
+    import re
+    match = re.search(r'projects/([^/]+)/zones/([^/]+)/instances/([^/]+)', resource_name)
+    
+    target_project = project_id
+    target_zone = None
+    instance_name = resource_name
+    
+    if match:
+        target_project = match.group(1)
+        target_zone = match.group(2)
+        instance_name = match.group(3)
+    
+    try:
+        if target_zone:
+            client = compute_v1.InstancesClient()
+            instance = client.get(project=target_project, zone=target_zone, instance=instance_name)
+            return _calculate_disk_size(instance)
+        else:
+            # If we don't have zone, we might need to search all zones (expensive)
+            # or just fail. For now, let's log warning and return 0 if no zone.
+            # But wait, maybe we can use AggregatedList?
+            client = compute_v1.InstancesClient()
+            request = compute_v1.AggregatedListInstancesRequest(project=project_id)
+            # Filter by name? 'name = instance_name'
+            # The filter syntax is specific.
+            request.filter = f"name = {instance_name}"
+            
+            # This might be slow for many instances.
+            # Let's try to be efficient.
+            # If we really can't parse it, maybe we skip for now to avoid performance hit?
+            # User said "resource shows it's project name in the resource_name".
+            # If it's just project, we still need zone.
+            
+            # Let's try AggregatedList with filter.
+            for zone, response in client.aggregated_list(request=request):
+                if response.instances:
+                    for instance in response.instances:
+                        if instance.name == instance_name:
+                            return _calculate_disk_size(instance)
+            
+            return 0
+            
+    except Exception as e:
+        logger.warning(f"Error fetching GCE details: {e}")
+        return 0
+
+def _calculate_disk_size(instance):
+    total_gb = 0
+    # Boot disk
+    for disk in instance.disks:
+        total_gb += disk.disk_size_gb
+    return total_gb

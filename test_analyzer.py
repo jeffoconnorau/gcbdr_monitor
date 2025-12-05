@@ -165,5 +165,31 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(stats['growth_rate_pct'], 100.0) # 1GB -> 2GB = 100% growth
         self.assertEqual(stats['total_resource_size_gb'], 100.0) # 100 GiB
 
+    @patch('analyzer.fetch_gce_instance_details')
+    def test_analyze_backup_jobs_gce_fallback(self, mock_fetch_gce, mock_fetch_logs):
+        # Mock logs with 0 size
+        mock_entry = Mock()
+        mock_entry.payload = {
+            'jobId': 'job-1',
+            'jobStatus': 'SUCCESSFUL',
+            'incrementalBackupSizeGib': 1,
+            'sourceResourceName': 'projects/p/zones/z/instances/vm-gce',
+            'resourceType': 'GCE_INSTANCE',
+            'startTime': '2023-01-01T12:00:00Z',
+            'endTime': '2023-01-01T13:00:00Z'
+        }
+        mock_entry.timestamp = datetime.now(timezone.utc)
+        mock_fetch_logs.return_value = [mock_entry]
+        
+        # Mock GCE return
+        mock_fetch_gce.return_value = 500.0
+        
+        result = analyze_backup_jobs('project-id')
+        
+        stats = result['resource_stats'][0]
+        self.assertEqual(stats['resource_name'], 'projects/p/zones/z/instances/vm-gce')
+        self.assertEqual(stats['total_resource_size_gb'], 500.0)
+        mock_fetch_gce.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
