@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_backup_logs(project_id, days):
     """
-    Queries Cloud Logging for GCBDR job completion logs.
+    Queries Cloud Logging for GCBDR job logs using the specific log name.
     Returns a list of relevant log entries.
     """
     client = cloud_logging.Client(project=project_id)
@@ -15,11 +15,10 @@ def fetch_backup_logs(project_id, days):
     now = datetime.now(timezone.utc)
     start_time = now - timedelta(days=days)
     
-    # Construct filter for GCBDR backup jobs
-    # Broadened to capture both successful and failed jobs for reporting
+    # Construct filter for GCBDR backup jobs based on the SQL query
     log_filter = f"""
     timestamp >= "{start_time.isoformat()}"
-    (jsonPayload.message =~ "Backup.*(succeeded|failed|finished|completed)" OR jsonPayload.event_type = "BACKUP_FINISHED")
+    logName="projects/{project_id}/logs/backupdr.googleapis.com%2Fbdr_backup_restore_jobs"
     """
     
     logger.info(f"Querying logs with filter: {log_filter}")
@@ -36,32 +35,88 @@ def fetch_backup_logs(project_id, days):
 
 def parse_job_data(entry):
     """
-    Extracts relevant data from a log entry.
-    Returns a dict with job_id, resource_name, change_rate_bytes, etc.
+    Extracts relevant data from a log entry's jsonPayload.
+    Returns a dict with structured data.
     """
     payload = entry.payload
-    # This extraction logic depends heavily on the actual log format.
-    
-    # Try to infer status if not explicitly present
-    status = payload.get('status')
-    message = payload.get('message', '')
-    
-    if not status:
-        if 'succeeded' in message.lower() or 'finished' in message.lower():
-            status = 'SUCCESS'
-        elif 'failed' in message.lower() or 'error' in message.lower():
-            status = 'FAILURE'
-        else:
-            status = 'UNKNOWN'
+    if not payload:
+        return None
 
+    # Extract fields as per SQL query
     return {
-        'job_id': payload.get('job_id'),
-        'resource_name': payload.get('resource_name', 'unknown-resource'),
-        'bytes_transferred': int(payload.get('bytes_transferred', 0)),
+        'jobId': payload.get('jobId'),
+        'jobStatus': payload.get('jobStatus'), # RUNNING, SKIPPED, SUCCESSFUL, FAILED
+        'startTime': payload.get('startTime'),
+        'endTime': payload.get('endTime'),
+        'jobCategory': payload.get('jobCategory'),
+        'resourceType': payload.get('resourceType'),
+        'sourceResourceName': payload.get('sourceResourceName'),
+        'bytes_transferred': int(payload.get('incrementalBackupSizeGib', 0) * 1024 * 1024 * 1024) if payload.get('incrementalBackupSizeGib') else 0, # Convert GiB to bytes for compatibility
         'timestamp': entry.timestamp,
-        'status': status,
-        'original_message': message
+        'json_payload': payload # Keep original payload for reference if needed
     }
+
+def process_jobs(parsed_logs):
+    """
+    Aggregates logs by jobId and determines the final status.
+    Logic mimics the SQL:
+    - Group by jobId
+    - Priority: FAILED (4) > SUCCESSFUL (3) > SKIPPED (2) > RUNNING (1)
+    """
+    jobs_map = {}
+    
+    # Status priority map
+    status_priority = {
+        "RUNNING": 1,
+        "SKIPPED": 2,
+        "SUCCESSFUL": 3,
+        "FAILED": 4
+    }
+
+    for log in parsed_logs:
+        if not log or not log.get('jobId'):
+            continue
+            
+        job_id = log['jobId']
+        status = log.get('jobStatus', 'UNKNOWN')
+        priority = status_priority.get(status, 0)
+        
+        if job_id not in jobs_map:
+            jobs_map[job_id] = {
+                'jobId': job_id,
+                'max_priority': priority,
+                'final_status': status,
+                'logs': [log]
+            }
+        else:
+            jobs_map[job_id]['logs'].append(log)
+            if priority > jobs_map[job_id]['max_priority']:
+                jobs_map[job_id]['max_priority'] = priority
+                jobs_map[job_id]['final_status'] = status
+
+    # Now construct the final list of jobs, using the log entry that matches the final status
+    # (or the latest one if multiple match, though SQL joins on status)
+    final_jobs = []
+    for job_id, data in jobs_map.items():
+        final_status = data['final_status']
+        
+        # Find the log entry that corresponds to this final status
+        # In SQL: JOIN ... ON ... AND json_payload.jobStatus = finalStatus
+        # We'll take the first one that matches, or just the last one if none match (fallback)
+        matching_log = next((l for l in data['logs'] if l.get('jobStatus') == final_status), None)
+        
+        if not matching_log:
+            # Fallback: use the latest log
+            matching_log = sorted(data['logs'], key=lambda x: x['timestamp'], reverse=True)[0]
+            
+        # Add derived fields
+        job_data = matching_log.copy()
+        job_data['status'] = final_status # Standardize key for existing logic
+        job_data['resource_name'] = job_data.get('sourceResourceName', 'unknown')
+        
+        final_jobs.append(job_data)
+        
+    return final_jobs
 
 def calculate_statistics(job_history):
     """
@@ -97,7 +152,7 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
             avg = stats[resource]['avg_bytes']
             if avg > 0 and job['bytes_transferred'] > (avg * threshold_factor):
                 anomalies.append({
-                    'job_id': job['job_id'],
+                    'job_id': job['jobId'],
                     'resource': resource,
                     'bytes': job['bytes_transferred'],
                     'avg_bytes': avg,
@@ -111,14 +166,17 @@ def analyze_backup_jobs(project_id, days=7):
     """
     # 1. Fetch logs
     all_logs = fetch_backup_logs(project_id, days)
-    parsed_jobs = [parse_job_data(e) for e in all_logs if e.payload]
+    parsed_logs = [parse_job_data(e) for e in all_logs]
+    
+    # 2. Process and deduplicate jobs
+    unique_jobs = process_jobs(parsed_logs)
     
     # Filter by status
-    successful_jobs = [j for j in parsed_jobs if j['status'] == 'SUCCESS']
-    failed_jobs = [j for j in parsed_jobs if j['status'] == 'FAILURE']
-    unknown_jobs = [j for j in parsed_jobs if j['status'] == 'UNKNOWN']
+    successful_jobs = [j for j in unique_jobs if j['status'] == 'SUCCESSFUL']
+    failed_jobs = [j for j in unique_jobs if j['status'] == 'FAILED']
+    other_jobs = [j for j in unique_jobs if j['status'] not in ('SUCCESSFUL', 'FAILED')]
     
-    logger.info(f"Total jobs found: {len(parsed_jobs)}")
+    logger.info(f"Total unique jobs: {len(unique_jobs)}")
     logger.info(f"Successful: {len(successful_jobs)}")
     logger.info(f"Failed: {len(failed_jobs)}")
     
@@ -126,10 +184,10 @@ def analyze_backup_jobs(project_id, days=7):
         logger.info("No successful jobs found for analysis.")
         return {
             "status": "no_successful_data",
-            "total_jobs": len(parsed_jobs),
+            "total_jobs": len(unique_jobs),
             "successful_count": len(successful_jobs),
             "failed_count": len(failed_jobs),
-            "unknown_count": len(unknown_jobs)
+            "other_count": len(other_jobs)
         }
 
     # Split into 'today' (or most recent) and 'history'
@@ -140,10 +198,10 @@ def analyze_backup_jobs(project_id, days=7):
     current_jobs = [j for j in successful_jobs if j['timestamp'] > cutoff]
     history_jobs = [j for j in successful_jobs if j['timestamp'] <= cutoff]
     
-    # 2. Calculate stats from history
+    # 3. Calculate stats from history
     stats = calculate_statistics(history_jobs)
     
-    # 3. Detect anomalies in current jobs
+    # 4. Detect anomalies in current jobs
     anomalies = detect_anomalies(current_jobs, stats)
     
     logger.info(f"Found {len(anomalies)} anomalies.")
@@ -151,8 +209,8 @@ def analyze_backup_jobs(project_id, days=7):
     return {
         "analyzed_jobs_count": len(current_jobs),
         "anomalies": anomalies,
-        "total_jobs_found": len(parsed_jobs),
+        "total_jobs_found": len(unique_jobs),
         "successful_count": len(successful_jobs),
         "failed_count": len(failed_jobs),
-        "unknown_count": len(unknown_jobs)
+        "other_count": len(other_jobs)
     }
