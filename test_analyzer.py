@@ -94,6 +94,17 @@ class TestAnalyzer(unittest.TestCase):
         data = parse_job_data(entry)
         self.assertEqual(data['total_resource_size_bytes'], 53687091200)
 
+        # Case 3: sourceResourceDataSizeGib (GiB)
+        entry.payload = {
+            'jobId': 'job-3',
+            'jobStatus': 'SUCCESSFUL',
+            'incrementalBackupSizeGib': 1,
+            'sourceResourceDataSizeGib': 100.0, # 100 GiB
+            'sourceResourceName': 'vm-3'
+        }
+        data = parse_job_data(entry)
+        self.assertEqual(data['total_resource_size_bytes'], 107374182400)
+
     def test_process_jobs_deduplication(self):
         # Create multiple logs for same job
         logs = [

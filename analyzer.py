@@ -51,6 +51,8 @@ def parse_job_data(entry):
         total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+    elif payload.get('sourceResourceDataSizeGib'):
+        total_size_bytes = int(float(payload.get('sourceResourceDataSizeGib')) * 1024 * 1024 * 1024)
     
     # Check nested protectedResourceDetails if not found
     if total_size_bytes == 0:
@@ -59,6 +61,8 @@ def parse_job_data(entry):
             total_size_bytes = int(protected_details.get('sourceResourceSizeBytes'))
         elif protected_details.get('usedStorageGib'):
             total_size_bytes = int(float(protected_details.get('usedStorageGib')) * 1024 * 1024 * 1024)
+        elif protected_details.get('sourceResourceDataSizeGib'):
+            total_size_bytes = int(float(protected_details.get('sourceResourceDataSizeGib')) * 1024 * 1024 * 1024)
 
     # Ensure incrementalBackupSizeGib is float
     inc_size_gib = float(payload.get('incrementalBackupSizeGib', 0))
