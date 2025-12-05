@@ -291,8 +291,9 @@ def analyze_backup_jobs(project_id, days=7):
         
         resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
 
-        # Fallback to GCE API if size is still 0 and it looks like a GCE instance
-        if total_resource_size_gb == 0 and resource_type == 'GCE_INSTANCE':
+        # Fallback to GCE API if size is still 0 and it looks like a GCE resource
+        # resource_type in logs is often 'Compute Engine' or 'Disk'
+        if total_resource_size_gb == 0 and resource_type in ('GCE_INSTANCE', 'Compute Engine', 'Disk'):
             try:
                 # Assuming resource_name format: projects/{project}/zones/{zone}/instances/{instance}
                 # But log might have it as just the instance name or full path.

@@ -175,7 +175,7 @@ class TestAnalyzer(unittest.TestCase):
             'jobStatus': 'SUCCESSFUL',
             'incrementalBackupSizeGib': 1,
             'sourceResourceName': 'projects/other-project/zones/us-west1-a/instances/vm-gce',
-            'resourceType': 'GCE_INSTANCE',
+            'resourceType': 'Compute Engine',
             'startTime': '2023-01-01T12:00:00Z',
             'endTime': '2023-01-01T13:00:00Z'
         }
