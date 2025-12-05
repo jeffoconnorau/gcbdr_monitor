@@ -270,26 +270,27 @@ def analyze_backup_jobs(project_id, days=7):
     current_stats = calculate_statistics(current_jobs)
     
     # 4. Detect anomalies in current jobs (using individual job data against history)
+    # Format resource stats for output    # Calculate statistics for the full period for reporting
+    period_stats = calculate_statistics(successful_jobs)
+    
+    # Calculate statistics for history (baseline) for anomaly detection
+    history_stats = calculate_statistics(history_jobs)
+    
     anomalies = detect_anomalies(current_jobs, history_stats)
-    
-    # Format resource stats for output - merging current and history
+
     resource_stats_list = []
+    all_resources = set(period_stats.keys())
     
-    # Get all resources from both sets
-    all_resources = set(history_stats.keys()) | set(current_stats.keys())
-    
+    # Initialize cache for GCE lookups
+    gce_cache = {}
+
     for res in all_resources:
-        h_data = history_stats.get(res, {})
-        c_data = current_stats.get(res, {})
+        p_data = period_stats.get(res, {})
         
-        # Defaults
-        avg_daily_change_gb = h_data.get('avg_daily_change_gb', 0)
-        current_daily_change_gb = c_data.get('avg_daily_change_gb', 0)
-        current_daily_change_pct = c_data.get('avg_daily_change_pct', 0)
-        # Prefer current total size, fallback to history
-        total_resource_size_gb = c_data.get('avg_total_size_gb') or h_data.get('avg_total_size_gb') or 0
-        
-        resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
+        # Use period stats for reporting
+        avg_daily_change_gb = p_data.get('avg_daily_change_gb', 0)
+        total_resource_size_gb = p_data.get('avg_total_size_gb', 0)
+        resource_type = p_data.get('resource_type', 'UNKNOWN')
 
         # Fallback to GCE API if size is still 0 and it looks like a GCE resource
         # resource_type in logs is often 'Compute Engine' or 'Disk'
@@ -297,40 +298,28 @@ def analyze_backup_jobs(project_id, days=7):
             try:
                 # Assuming resource_name format: projects/{project}/zones/{zone}/instances/{instance}
                 # But log might have it as just the instance name or full path.
-                # Let's check what we have. The logs usually have 'sourceResourceName' which might be full path.
-                # If it's just name, we might need to guess or search (expensive).
-                # Let's assume it's a full path or we can construct it if we know the project/zone.
-                # Wait, the log 'sourceResourceName' is often just the instance name or a partial path.
-                # The 'resource_name' key in our stats comes from 'sourceResourceName'.
-                # Let's try to parse it.
-                
-                # We need a cache to avoid repeated calls
-                if not hasattr(analyze_backup_jobs, 'gce_cache'):
-                    analyze_backup_jobs.gce_cache = {}
-                
-                if res in analyze_backup_jobs.gce_cache:
-                    total_resource_size_gb = analyze_backup_jobs.gce_cache[res]
+                # We'll pass the raw resource_name to the fetch function which now handles parsing.
+                gce_size = 0
+                if res in gce_cache:
+                    gce_size = gce_cache[res]
                 else:
-                    # We need to find a sample job to get more details if needed, 
-                    # but we only have the resource name here.
-                    # Let's try to fetch details.
-                    size_gb = fetch_gce_instance_details(project_id, res)
-                    if size_gb > 0:
-                        total_resource_size_gb = size_gb
-                        analyze_backup_jobs.gce_cache[res] = size_gb
+                    gce_size = fetch_gce_instance_details(project_id, res)
+                    gce_cache[res] = gce_size
+                
+                if gce_size > 0:
+                    total_resource_size_gb = gce_size
             except Exception as e:
                 logger.warning(f"Failed to fetch GCE details for {res}: {e}")
 
         # Recalculate percentages if we have a valid total size (especially if it came from GCE)
-        # We also need to extract avg_daily_change_pct from h_data if we haven't already
-        avg_daily_change_pct = h_data.get('avg_daily_change_pct', 0)
+        # We map 'avg_daily_change_gb' (period average) to 'current_daily_change_gb' output field
+        # as per user request to have it reflect the reported period.
+        current_daily_change_gb = avg_daily_change_gb
+        current_daily_change_pct = 0
         
         if total_resource_size_gb > 0:
             if current_daily_change_gb > 0:
                 current_daily_change_pct = (current_daily_change_gb / total_resource_size_gb) * 100
-            
-            if avg_daily_change_gb > 0:
-                avg_daily_change_pct = (avg_daily_change_gb / total_resource_size_gb) * 100
 
         resource_stats_list.append({
             "resource_name": res,
@@ -338,7 +327,7 @@ def analyze_backup_jobs(project_id, days=7):
             "total_resource_size_gb": round(total_resource_size_gb, 2),
             "current_daily_change_gb": round(current_daily_change_gb, 2),
             "current_daily_change_pct": round(current_daily_change_pct, 2),
-            "backup_job_count": c_data.get('data_points', 0) + h_data.get('data_points', 0)
+            "backup_job_count": p_data.get('data_points', 0)
         })
     
     logger.info(f"Found {len(anomalies)} anomalies.")
