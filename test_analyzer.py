@@ -160,7 +160,6 @@ class TestAnalyzer(unittest.TestCase):
         
         stats = result['resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'vm1')
-        self.assertEqual(stats['avg_daily_change_gb'], 1.0) # Historical
         self.assertEqual(stats['current_daily_change_gb'], 2.0) # Current
         self.assertEqual(stats['growth_rate_pct'], 100.0) # 1GB -> 2GB = 100% growth
         self.assertEqual(stats['total_resource_size_gb'], 100.0) # 100 GiB
@@ -192,8 +191,6 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(stats['total_resource_size_gb'], 500.0)
         # 1 GB change / 500 GB total = 0.2%
         self.assertEqual(stats['current_daily_change_pct'], 0.2)
-        # Assuming avg_daily_change_gb is 0 in this mock (defaults), avg_daily_change_pct should be 0
-        self.assertEqual(stats['avg_daily_change_pct'], 0.0)
         
         # Verify fetch_gce_instance_details was called with correct args
         # Note: analyze_backup_jobs calls it with (project_id, resource_name)

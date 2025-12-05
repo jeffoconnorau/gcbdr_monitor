@@ -343,8 +343,6 @@ def analyze_backup_jobs(project_id, days=7):
             "resource_name": res,
             "resource_type": resource_type,
             "total_resource_size_gb": round(total_resource_size_gb, 2),
-            "avg_daily_change_gb": round(avg_daily_change_gb, 2),
-            "avg_daily_change_pct": round(avg_daily_change_pct, 2),
             "current_daily_change_gb": round(current_daily_change_gb, 2),
             "current_daily_change_pct": round(current_daily_change_pct, 2),
             "growth_rate_pct": round(growth_rate_pct, 2)
