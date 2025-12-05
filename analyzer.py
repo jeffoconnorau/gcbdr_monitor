@@ -338,7 +338,7 @@ def analyze_backup_jobs(project_id, days=7):
             "total_resource_size_gb": round(total_resource_size_gb, 2),
             "current_daily_change_gb": round(current_daily_change_gb, 2),
             "current_daily_change_pct": round(current_daily_change_pct, 2),
-            "backup_job_count": c_data.get('data_points', 0)
+            "backup_job_count": c_data.get('data_points', 0) + h_data.get('data_points', 0)
         })
     
     logger.info(f"Found {len(anomalies)} anomalies.")
