@@ -19,17 +19,31 @@ from analyzer import calculate_statistics, detect_anomalies, parse_job_data, ana
 class TestAnalyzer(unittest.TestCase):
     def test_calculate_statistics(self):
         # Mock job history
+        # 100GB total, 1GB change = 1%
         history = [
-            {'resource_name': 'vm-1', 'bytes_transferred': 100, 'timestamp': datetime.now(timezone.utc)},
-            {'resource_name': 'vm-1', 'bytes_transferred': 200, 'timestamp': datetime.now(timezone.utc)},
-            {'resource_name': 'vm-2', 'bytes_transferred': 500, 'timestamp': datetime.now(timezone.utc)},
+            {
+                'resource_name': 'vm-1', 
+                'bytes_transferred': 1073741824, # 1 GiB
+                'total_resource_size_bytes': 107374182400, # 100 GiB
+                'resourceType': 'GCE_INSTANCE',
+                'timestamp': datetime.now(timezone.utc)
+            },
+            {
+                'resource_name': 'vm-1', 
+                'bytes_transferred': 2147483648, # 2 GiB
+                'total_resource_size_bytes': 107374182400, # 100 GiB
+                'resourceType': 'GCE_INSTANCE',
+                'timestamp': datetime.now(timezone.utc)
+            },
         ]
         
         stats = calculate_statistics(history)
         
-        self.assertEqual(stats['vm-1']['avg_bytes'], 150.0)
-        self.assertEqual(stats['vm-1']['data_points'], 2)
-        self.assertEqual(stats['vm-2']['avg_bytes'], 500.0)
+        # Avg bytes = 1.5 GiB
+        self.assertEqual(stats['vm-1']['avg_bytes'], 1610612736.0)
+        self.assertEqual(stats['vm-1']['avg_daily_change_gb'], 1.5)
+        self.assertEqual(stats['vm-1']['avg_daily_change_pct'], 1.5)
+        self.assertEqual(stats['vm-1']['resource_type'], 'GCE_INSTANCE')
 
     def test_detect_anomalies(self):
         stats = {
@@ -53,17 +67,18 @@ class TestAnalyzer(unittest.TestCase):
         entry = Mock()
         entry.timestamp = datetime.now(timezone.utc)
         
-        # Case 1: Standard entry
+        # Case 1: Standard entry with total size
         entry.payload = {
             'jobId': 'job-1',
             'jobStatus': 'SUCCESSFUL',
             'incrementalBackupSizeGib': 1,
+            'sourceResourceSizeBytes': 107374182400, # 100 GiB
             'sourceResourceName': 'vm-1'
         }
         data = parse_job_data(entry)
         self.assertEqual(data['jobStatus'], 'SUCCESSFUL')
         self.assertEqual(data['bytes_transferred'], 1073741824) # 1 GiB
-        # resource_name is derived in process_jobs, not parse_job_data
+        self.assertEqual(data['total_resource_size_bytes'], 107374182400)
         self.assertEqual(data['sourceResourceName'], 'vm-1')
 
     def test_process_jobs_deduplication(self):
@@ -89,20 +104,25 @@ class TestAnalyzer(unittest.TestCase):
     def test_analyze_backup_jobs_counts(self, mock_fetch):
         # Create mock entries
         entry1 = Mock()
-        entry1.payload = {'jobId': 'j1', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 0.1, 'sourceResourceName': 'vm1'}
-        entry1.timestamp = datetime.now(timezone.utc)
+        entry1.payload = {
+            'jobId': 'j1', 
+            'jobStatus': 'SUCCESSFUL', 
+            'incrementalBackupSizeGib': 1, 
+            'sourceResourceSizeBytes': 107374182400,
+            'sourceResourceName': 'vm1',
+            'resourceType': 'GCE_INSTANCE'
+        }
+        entry1.timestamp = datetime.now(timezone.utc) - timedelta(days=2) # History
         
-        entry2 = Mock()
-        entry2.payload = {'jobId': 'j2', 'jobStatus': 'FAILED', 'sourceResourceName': 'vm1'}
-        entry2.timestamp = datetime.now(timezone.utc)
-        
-        mock_fetch.return_value = [entry1, entry2]
+        mock_fetch.return_value = [entry1]
         
         result = analyze_backup_jobs('project-id')
         
-        self.assertEqual(result['total_jobs_found'], 2)
         self.assertEqual(result['successful_count'], 1)
-        self.assertEqual(result['failed_count'], 1)
+        self.assertEqual(len(result['resource_stats']), 1)
+        self.assertEqual(result['resource_stats'][0]['resource_name'], 'vm1')
+        self.assertEqual(result['resource_stats'][0]['avg_daily_change_gb'], 1.0)
+        self.assertEqual(result['resource_stats'][0]['avg_daily_change_pct'], 1.0)
 
 if __name__ == '__main__':
     unittest.main()

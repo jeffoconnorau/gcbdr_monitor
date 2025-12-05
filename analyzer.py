@@ -43,6 +43,15 @@ def parse_job_data(entry):
         return None
 
     # Extract fields as per SQL query
+    # Try to find total size for percentage calculation
+    # 'sourceResourceSizeBytes' is a common field for total size in bytes
+    # 'usedStorageGib' might also be available
+    total_size_bytes = 0
+    if payload.get('sourceResourceSizeBytes'):
+        total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
+    elif payload.get('usedStorageGib'):
+        total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+
     return {
         'jobId': payload.get('jobId'),
         'jobStatus': payload.get('jobStatus'), # RUNNING, SKIPPED, SUCCESSFUL, FAILED
@@ -52,6 +61,7 @@ def parse_job_data(entry):
         'resourceType': payload.get('resourceType'),
         'sourceResourceName': payload.get('sourceResourceName'),
         'bytes_transferred': int(payload.get('incrementalBackupSizeGib', 0) * 1024 * 1024 * 1024) if payload.get('incrementalBackupSizeGib') else 0, # Convert GiB to bytes for compatibility
+        'total_resource_size_bytes': total_size_bytes,
         'timestamp': entry.timestamp,
         'json_payload': payload # Keep original payload for reference if needed
     }
@@ -121,22 +131,40 @@ def process_jobs(parsed_logs):
 def calculate_statistics(job_history):
     """
     Computes average change rate per resource.
+    Returns a dict with resource stats.
     """
     stats = {}
     for job in job_history:
         resource = job['resource_name']
         if resource not in stats:
-            stats[resource] = {'total_bytes': 0, 'count': 0, 'timestamps': []}
+            stats[resource] = {
+                'total_bytes': 0, 
+                'count': 0, 
+                'total_size_sum': 0,
+                'resource_type': job.get('resourceType', 'UNKNOWN'),
+                'timestamps': []
+            }
         
         stats[resource]['total_bytes'] += job['bytes_transferred']
+        stats[resource]['total_size_sum'] += job.get('total_resource_size_bytes', 0)
         stats[resource]['count'] += 1
         stats[resource]['timestamps'].append(job['timestamp'])
     
     results = {}
     for resource, data in stats.items():
         if data['count'] > 0:
+            avg_bytes = data['total_bytes'] / data['count']
+            avg_total_size = data['total_size_sum'] / data['count']
+            
+            avg_daily_change_pct = 0
+            if avg_total_size > 0:
+                avg_daily_change_pct = (avg_bytes / avg_total_size) * 100
+                
             results[resource] = {
-                'avg_bytes': data['total_bytes'] / data['count'],
+                'avg_bytes': avg_bytes,
+                'avg_daily_change_gb': avg_bytes / (1024 * 1024 * 1024),
+                'avg_daily_change_pct': avg_daily_change_pct,
+                'resource_type': data['resource_type'],
                 'data_points': data['count']
             }
     return results
@@ -204,11 +232,22 @@ def analyze_backup_jobs(project_id, days=7):
     # 4. Detect anomalies in current jobs
     anomalies = detect_anomalies(current_jobs, stats)
     
+    # Format resource stats for output
+    resource_stats_list = []
+    for res, data in stats.items():
+        resource_stats_list.append({
+            "resource_name": res,
+            "resource_type": data['resource_type'],
+            "avg_daily_change_gb": round(data['avg_daily_change_gb'], 2),
+            "avg_daily_change_pct": round(data['avg_daily_change_pct'], 2)
+        })
+    
     logger.info(f"Found {len(anomalies)} anomalies.")
     
     return {
         "analyzed_jobs_count": len(current_jobs),
         "anomalies": anomalies,
+        "resource_stats": resource_stats_list,
         "total_jobs_found": len(unique_jobs),
         "successful_count": len(successful_jobs),
         "failed_count": len(failed_jobs),
