@@ -16,13 +16,10 @@ def fetch_backup_logs(project_id, days):
     start_time = now - timedelta(days=days)
     
     # Construct filter for GCBDR backup jobs
-    # Note: This is a placeholder filter. We need to refine this based on actual GCBDR log structure.
-    # Typically looking for "Job succeeded" or similar in jsonPayload
-    # and resource.type="gce_instance" or specific GCBDR resource types.
-    # For now, we'll assume a generic filter that we might need to adjust.
+    # Broadened to capture both successful and failed jobs for reporting
     log_filter = f"""
     timestamp >= "{start_time.isoformat()}"
-    jsonPayload.message =~ "Backup.*succeeded" OR jsonPayload.event_type = "BACKUP_FINISHED"
+    (jsonPayload.message =~ "Backup.*(succeeded|failed|finished|completed)" OR jsonPayload.event_type = "BACKUP_FINISHED")
     """
     
     logger.info(f"Querying logs with filter: {log_filter}")
@@ -44,15 +41,26 @@ def parse_job_data(entry):
     """
     payload = entry.payload
     # This extraction logic depends heavily on the actual log format.
-    # We will assume some standard fields for now.
     
-    # Mock structure for demonstration
+    # Try to infer status if not explicitly present
+    status = payload.get('status')
+    message = payload.get('message', '')
+    
+    if not status:
+        if 'succeeded' in message.lower() or 'finished' in message.lower():
+            status = 'SUCCESS'
+        elif 'failed' in message.lower() or 'error' in message.lower():
+            status = 'FAILURE'
+        else:
+            status = 'UNKNOWN'
+
     return {
         'job_id': payload.get('job_id'),
         'resource_name': payload.get('resource_name', 'unknown-resource'),
         'bytes_transferred': int(payload.get('bytes_transferred', 0)),
         'timestamp': entry.timestamp,
-        'status': payload.get('status')
+        'status': status,
+        'original_message': message
     }
 
 def calculate_statistics(job_history):
@@ -102,24 +110,35 @@ def analyze_backup_jobs(project_id, days=7):
     Main orchestration function.
     """
     # 1. Fetch logs
-    # We might need to fetch a bit more than 'days' to ensure we have the current day's jobs too
-    # or separate the 'history' fetch from 'current' fetch.
-    # For simplicity, let's fetch everything in range and split by time.
-    
     all_logs = fetch_backup_logs(project_id, days)
     parsed_jobs = [parse_job_data(e) for e in all_logs if e.payload]
     
-    if not parsed_jobs:
-        logger.info("No jobs found.")
-        return {"status": "no_data"}
+    # Filter by status
+    successful_jobs = [j for j in parsed_jobs if j['status'] == 'SUCCESS']
+    failed_jobs = [j for j in parsed_jobs if j['status'] == 'FAILURE']
+    unknown_jobs = [j for j in parsed_jobs if j['status'] == 'UNKNOWN']
+    
+    logger.info(f"Total jobs found: {len(parsed_jobs)}")
+    logger.info(f"Successful: {len(successful_jobs)}")
+    logger.info(f"Failed: {len(failed_jobs)}")
+    
+    if not successful_jobs:
+        logger.info("No successful jobs found for analysis.")
+        return {
+            "status": "no_successful_data",
+            "total_jobs": len(parsed_jobs),
+            "successful_count": len(successful_jobs),
+            "failed_count": len(failed_jobs),
+            "unknown_count": len(unknown_jobs)
+        }
 
     # Split into 'today' (or most recent) and 'history'
-    # This is a simplification. In production, 'current' might be "jobs from the last 24h"
+    # Using successful jobs only for analysis
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=1)
     
-    current_jobs = [j for j in parsed_jobs if j['timestamp'] > cutoff]
-    history_jobs = [j for j in parsed_jobs if j['timestamp'] <= cutoff]
+    current_jobs = [j for j in successful_jobs if j['timestamp'] > cutoff]
+    history_jobs = [j for j in successful_jobs if j['timestamp'] <= cutoff]
     
     # 2. Calculate stats from history
     stats = calculate_statistics(history_jobs)
@@ -131,5 +150,9 @@ def analyze_backup_jobs(project_id, days=7):
     
     return {
         "analyzed_jobs_count": len(current_jobs),
-        "anomalies": anomalies
+        "anomalies": anomalies,
+        "total_jobs_found": len(parsed_jobs),
+        "successful_count": len(successful_jobs),
+        "failed_count": len(failed_jobs),
+        "unknown_count": len(unknown_jobs)
     }
