@@ -19,6 +19,14 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
 - Google Cloud Project with:
     - Cloud Logging enabled
     - Permissions to read logs (`roles/logging.viewer` or similar)
+    - Permissions to view Compute Engine resources (`roles/compute.viewer`) for fetching disk sizes if missing in logs.
+
+## Metrics Explained
+
+- **Total Resource Size (GiB)**: The total size of the protected resource. If not found in backup logs, it is fetched directly from the Compute Engine API (for GCE instances).
+- **Current Daily Change Rate (GB)**: The amount of data changed in the last 24 hours.
+- **Current Daily Change Rate (%)**: (Current Daily Change GB / Total Resource Size GB) * 100.
+- **Backup Job Count**: The total number of successful backup jobs for the resource in the analyzed period (history + current).
 
 ## Installation
 
