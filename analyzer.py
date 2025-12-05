@@ -289,6 +289,8 @@ def analyze_backup_jobs(project_id, days=7):
         # Prefer current total size, fallback to history
         total_resource_size_gb = c_data.get('avg_total_size_gb') or h_data.get('avg_total_size_gb') or 0
         
+        resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
+
         # Fallback to GCE API if size is still 0 and it looks like a GCE instance
         if total_resource_size_gb == 0 and resource_type == 'GCE_INSTANCE':
             try:

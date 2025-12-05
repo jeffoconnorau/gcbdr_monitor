@@ -165,6 +165,7 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(stats['growth_rate_pct'], 100.0) # 1GB -> 2GB = 100% growth
         self.assertEqual(stats['total_resource_size_gb'], 100.0) # 100 GiB
 
+    @patch('analyzer.fetch_backup_logs')
     @patch('analyzer.fetch_gce_instance_details')
     def test_analyze_backup_jobs_gce_fallback(self, mock_fetch_gce, mock_fetch_logs):
         # Mock logs with 0 size
