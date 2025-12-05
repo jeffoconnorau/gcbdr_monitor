@@ -44,13 +44,14 @@ def parse_job_data(entry):
 
     # Extract fields as per SQL query
     # Try to find total size for percentage calculation
-    # 'sourceResourceSizeBytes' is a common field for total size in bytes
-    # 'usedStorageGib' might also be available
     total_size_bytes = 0
     if payload.get('sourceResourceSizeBytes'):
         total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+
+    # Ensure incrementalBackupSizeGib is float
+    inc_size_gib = float(payload.get('incrementalBackupSizeGib', 0))
 
     return {
         'jobId': payload.get('jobId'),
@@ -60,7 +61,7 @@ def parse_job_data(entry):
         'jobCategory': payload.get('jobCategory'),
         'resourceType': payload.get('resourceType'),
         'sourceResourceName': payload.get('sourceResourceName'),
-        'bytes_transferred': int(payload.get('incrementalBackupSizeGib', 0) * 1024 * 1024 * 1024) if payload.get('incrementalBackupSizeGib') else 0, # Convert GiB to bytes for compatibility
+        'bytes_transferred': int(inc_size_gib * 1024 * 1024 * 1024), # Convert GiB to bytes
         'total_resource_size_bytes': total_size_bytes,
         'timestamp': entry.timestamp,
         'json_payload': payload # Keep original payload for reference if needed
@@ -226,20 +227,43 @@ def analyze_backup_jobs(project_id, days=7):
     current_jobs = [j for j in successful_jobs if j['timestamp'] > cutoff]
     history_jobs = [j for j in successful_jobs if j['timestamp'] <= cutoff]
     
-    # 3. Calculate stats from history
-    stats = calculate_statistics(history_jobs)
+    # 3. Calculate stats
+    history_stats = calculate_statistics(history_jobs)
+    current_stats = calculate_statistics(current_jobs)
     
-    # 4. Detect anomalies in current jobs
-    anomalies = detect_anomalies(current_jobs, stats)
+    # 4. Detect anomalies in current jobs (using individual job data against history)
+    anomalies = detect_anomalies(current_jobs, history_stats)
     
-    # Format resource stats for output
+    # Format resource stats for output - merging current and history
     resource_stats_list = []
-    for res, data in stats.items():
+    
+    # Get all resources from both sets
+    all_resources = set(history_stats.keys()) | set(current_stats.keys())
+    
+    for res in all_resources:
+        h_data = history_stats.get(res, {})
+        c_data = current_stats.get(res, {})
+        
+        # Defaults
+        avg_daily_change_gb = h_data.get('avg_daily_change_gb', 0)
+        current_daily_change_gb = c_data.get('avg_daily_change_gb', 0)
+        current_daily_change_pct = c_data.get('avg_daily_change_pct', 0)
+        resource_type = h_data.get('resource_type') or c_data.get('resource_type') or 'UNKNOWN'
+        
+        # Calculate growth
+        growth_rate_pct = 0
+        if avg_daily_change_gb > 0:
+            growth_rate_pct = ((current_daily_change_gb - avg_daily_change_gb) / avg_daily_change_gb) * 100
+        elif current_daily_change_gb > 0:
+            growth_rate_pct = 100 # New resource or previously 0 change
+            
         resource_stats_list.append({
             "resource_name": res,
-            "resource_type": data['resource_type'],
-            "avg_daily_change_gb": round(data['avg_daily_change_gb'], 2),
-            "avg_daily_change_pct": round(data['avg_daily_change_pct'], 2)
+            "resource_type": resource_type,
+            "avg_daily_change_gb": round(avg_daily_change_gb, 2),
+            "current_daily_change_gb": round(current_daily_change_gb, 2),
+            "current_daily_change_pct": round(current_daily_change_pct, 2),
+            "growth_rate_pct": round(growth_rate_pct, 2)
         })
     
     logger.info(f"Found {len(anomalies)} anomalies.")

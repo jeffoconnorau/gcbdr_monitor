@@ -103,6 +103,7 @@ class TestAnalyzer(unittest.TestCase):
     @patch('analyzer.fetch_backup_logs')
     def test_analyze_backup_jobs_counts(self, mock_fetch):
         # Create mock entries
+        # History job (2 days ago) - 1GB change
         entry1 = Mock()
         entry1.payload = {
             'jobId': 'j1', 
@@ -112,17 +113,32 @@ class TestAnalyzer(unittest.TestCase):
             'sourceResourceName': 'vm1',
             'resourceType': 'GCE_INSTANCE'
         }
-        entry1.timestamp = datetime.now(timezone.utc) - timedelta(days=2) # History
+        entry1.timestamp = datetime.now(timezone.utc) - timedelta(days=2)
         
-        mock_fetch.return_value = [entry1]
+        # Current job (today) - 2GB change
+        entry2 = Mock()
+        entry2.payload = {
+            'jobId': 'j2', 
+            'jobStatus': 'SUCCESSFUL', 
+            'incrementalBackupSizeGib': 2, 
+            'sourceResourceSizeBytes': 107374182400,
+            'sourceResourceName': 'vm1',
+            'resourceType': 'GCE_INSTANCE'
+        }
+        entry2.timestamp = datetime.now(timezone.utc)
+        
+        mock_fetch.return_value = [entry1, entry2]
         
         result = analyze_backup_jobs('project-id')
         
-        self.assertEqual(result['successful_count'], 1)
+        self.assertEqual(result['successful_count'], 2)
         self.assertEqual(len(result['resource_stats']), 1)
-        self.assertEqual(result['resource_stats'][0]['resource_name'], 'vm1')
-        self.assertEqual(result['resource_stats'][0]['avg_daily_change_gb'], 1.0)
-        self.assertEqual(result['resource_stats'][0]['avg_daily_change_pct'], 1.0)
+        
+        stats = result['resource_stats'][0]
+        self.assertEqual(stats['resource_name'], 'vm1')
+        self.assertEqual(stats['avg_daily_change_gb'], 1.0) # Historical
+        self.assertEqual(stats['current_daily_change_gb'], 2.0) # Current
+        self.assertEqual(stats['growth_rate_pct'], 100.0) # 1GB -> 2GB = 100% growth
 
 if __name__ == '__main__':
     unittest.main()
