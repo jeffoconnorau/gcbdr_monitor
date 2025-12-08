@@ -197,13 +197,31 @@ def parse_gcb_job_data(entry):
         return None
 
     # Extract fields
-    job_id = payload.get('jobId')
+    # Job ID might be in jobName or need to be parsed from insertId
+    job_id = payload.get('jobName')
+    
+    if not job_id:
+        # Try to parse from insertId: "jobName_applianceId"
+        # entry.insert_id is usually available, or payload 'insertId'
+        insert_id = entry.insert_id or payload.get('insertId')
+        if insert_id and '_' in insert_id:
+            job_id = insert_id.split('_')[0]
     
     total_size_bytes = 0
+    
+    # Check for various size fields (including snake_case as per user feedback)
     if payload.get('sourceResourceSizeBytes'):
         total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+    elif payload.get('resource_data_size_in_gib'):
+        total_size_bytes = int(float(payload.get('resource_data_size_in_gib')) * 1024 * 1024 * 1024)
+    elif payload.get('data_copied_in_gib'):
+        # This might be transfer size, but sometimes useful if total size is missing
+        # But usually we want total resource size. 
+        # If resource_data_size_in_gib is missing, maybe this is a fallback?
+        # Let's prioritize resource_data_size_in_gib if available.
+        pass
         
     return {
         'jobId': job_id,

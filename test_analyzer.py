@@ -305,11 +305,11 @@ if __name__ == '__main__':
         entry_app.timestamp = datetime.now(timezone.utc)
         mock_fetch_appliance.return_value = [entry_app]
         
-        # GCB job with size
+        # GCB job with size (using snake_case and insertId)
         entry_gcb = Mock()
+        entry_gcb.insert_id = 'job-enrich-1_appliance-id'
         entry_gcb.payload = {
-            'jobId': 'job-enrich-1',
-            'sourceResourceSizeBytes': 107374182400 # 100 GiB
+            'resource_data_size_in_gib': 100.0 # 100 GiB
         }
         mock_fetch_gcb.return_value = [entry_gcb]
         
