@@ -390,6 +390,7 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
                     'job_id': job['jobId'],
                     'resource': resource,
                     'resource_type': job.get('resourceType', 'UNKNOWN'),
+                    'total_resource_size_gb': round(job.get('total_resource_size_bytes', 0) / (1024**3), 2),
                     'date': date_str,
                     'time': time_str,
                     'bytes': job['bytes_transferred'],

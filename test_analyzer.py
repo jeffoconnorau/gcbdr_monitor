@@ -52,9 +52,9 @@ class TestAnalyzer(unittest.TestCase):
         }
         
         current_jobs = [
-            {'jobId': 'job-1', 'resource_name': 'vm-1', 'bytes_transferred': 1073741824, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE'}, # Normal (1 GiB)
-            {'jobId': 'job-2', 'resource_name': 'vm-1', 'bytes_transferred': 10737418240, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE'}, # Anomaly (10 GiB)
-            {'jobId': 'job-3', 'resource_name': 'vm-2', 'bytes_transferred': 1000, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE'}, # New resource (no stats)
+            {'jobId': 'job-1', 'resource_name': 'vm-1', 'bytes_transferred': 1073741824, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE', 'total_resource_size_bytes': 107374182400}, # Normal (1 GiB)
+            {'jobId': 'job-2', 'resource_name': 'vm-1', 'bytes_transferred': 10737418240, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE', 'total_resource_size_bytes': 107374182400}, # Anomaly (10 GiB)
+            {'jobId': 'job-3', 'resource_name': 'vm-2', 'bytes_transferred': 1000, 'timestamp': datetime.now(timezone.utc), 'resourceType': 'GCE_INSTANCE', 'total_resource_size_bytes': 107374182400}, # New resource (no stats)
         ]
         
         anomalies = detect_anomalies(current_jobs, stats)
@@ -68,6 +68,7 @@ class TestAnalyzer(unittest.TestCase):
         self.assertIn('date', anomalies[0])
         self.assertIn('time', anomalies[0])
         self.assertEqual(anomalies[0]['resource_type'], 'GCE_INSTANCE')
+        self.assertEqual(anomalies[0]['total_resource_size_gb'], 100.0)
 
     def test_parse_job_data(self):
         # Mock entry

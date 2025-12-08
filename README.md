@@ -121,7 +121,8 @@ The analysis returns a JSON object with the following structure:
       "job_id": "Job_19704112",
       "resource": "sql-cg2",
       "resource_type": "GCE_INSTANCE",
-      "time": "02:53:15 UTC"
+      "time": "02:53:15 UTC",
+      "total_resource_size_gb": 100.0
     },
     {
       "avg_bytes": 3579139.3333333335,
@@ -132,8 +133,9 @@ The analysis returns a JSON object with the following structure:
       "gib_transferred": 0.02,
       "job_id": "Job_19704041",
       "resource": "WINSQL22-02",
-      "resource_type": "GCE_INSTANCE",
-      "time": "02:53:15 UTC"
+      "resource_type": "SqlInstance",
+      "time": "02:53:15 UTC",
+      "total_resource_size_gb": 200.0
     }
   ]
 }
