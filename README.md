@@ -64,10 +64,12 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
 3.  **Trigger Analysis:**
     You can trigger the analysis by visiting the root endpoint:
     ```bash
-    curl "http://localhost:8080/?days=7&filter_name=*sql*"
+    curl "http://localhost:8080/?days=7&filter_name=*sql*&source_type=appliance&format=html"
     ```
     - `days`: (Optional) Number of days of history to analyze (default: 7).
     - `filter_name`: (Optional) Filter resources by name. Supports wildcards (e.g., `*sql*`, `vm-?`) or case-insensitive substring search.
+    - `source_type`: (Optional) Filter by backup source. Options: `all` (default), `vault`, `appliance`.
+    - `format`: (Optional) Output format. Options: `json` (default), `csv`, `html`.
 
 ### Inspecting Logs
 

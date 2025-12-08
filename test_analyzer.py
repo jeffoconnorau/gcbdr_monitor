@@ -424,3 +424,57 @@ if __name__ == '__main__':
         self.assertEqual(result['summary']['successful_jobs'], 1)
         self.assertEqual(len(result['vault_workloads']['resource_stats']), 1)
         self.assertEqual(result['vault_workloads']['resource_stats'][0]['resource_name'], 'web-server-1')
+
+    @patch('analyzer.fetch_gcb_jobs_logs')
+    @patch('analyzer.fetch_appliance_logs')
+    @patch('analyzer.fetch_backup_logs')
+    def test_analyze_backup_jobs_source_filtering(self, mock_fetch_vault, mock_fetch_appliance, mock_fetch_gcb):
+        mock_fetch_gcb.return_value = []
+        
+        # Vault job
+        entry1 = Mock()
+        entry1.payload = {
+            'jobId': 'j1', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1, 
+            'sourceResourceSizeBytes': 100, 'sourceResourceName': 'vault-vm', 'resourceType': 'GCE_INSTANCE'
+        }
+        entry1.timestamp = datetime.now(timezone.utc)
+        mock_fetch_vault.return_value = [entry1]
+        
+        # Appliance job
+        entry2 = Mock()
+        entry2.payload = {
+            'jobName': 'j2', 'eventId': 44003, 'dataCopiedInBytes': 1, 
+            'sourceSize': 100, 'appName': 'app-vm', 'appType': 'VMBackup'
+        }
+        entry2.timestamp = datetime.now(timezone.utc)
+        mock_fetch_appliance.return_value = [entry2]
+        
+        # Test 'all' (default)
+        result = analyze_backup_jobs('project-id', source_type='all')
+        self.assertEqual(result['summary']['successful_jobs'], 2)
+        
+        # Test 'vault'
+        result = analyze_backup_jobs('project-id', source_type='vault')
+        self.assertEqual(result['summary']['successful_jobs'], 1)
+        self.assertEqual(result['vault_workloads']['successful_jobs'], 1)
+        self.assertEqual(result['appliance_workloads']['successful_jobs'], 0)
+        self.assertEqual(result['vault_workloads']['resource_stats'][0]['resource_name'], 'vault-vm')
+        
+        # Test 'appliance'
+        result = analyze_backup_jobs('project-id', source_type='appliance')
+        self.assertEqual(result['summary']['successful_jobs'], 1)
+        self.assertEqual(result['vault_workloads']['successful_jobs'], 0)
+        self.assertEqual(result['appliance_workloads']['successful_jobs'], 1)
+        self.assertEqual(result['appliance_workloads']['resource_stats'][0]['resource_name'], 'app-vm')
+        
+        # Verify fetch calls were optimized
+        # When source_type='vault', fetch_appliance_logs should NOT be called (or we can't easily check call count reset without reset_mock)
+        # Let's check if we can verify strict calling.
+        
+        mock_fetch_appliance.reset_mock()
+        analyze_backup_jobs('project-id', source_type='vault')
+        mock_fetch_appliance.assert_not_called()
+        
+        mock_fetch_vault.reset_mock()
+        analyze_backup_jobs('project-id', source_type='appliance')
+        mock_fetch_vault.assert_not_called()

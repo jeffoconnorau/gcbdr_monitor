@@ -9,6 +9,108 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import io
+import csv
+
+def format_csv(results):
+    """
+    Formats the results as a CSV string.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow(['Resource Name', 'Type', 'Source', 'Total Size (GiB)', 'Daily Change (GB)', 'Daily Change (%)', 'Job Count'])
+    
+    # Data
+    # Combine vault and appliance stats
+    all_stats = results.get('vault_workloads', {}).get('resource_stats', []) + \
+                results.get('appliance_workloads', {}).get('resource_stats', [])
+                
+    for r in all_stats:
+        writer.writerow([
+            r.get('resource_name'),
+            r.get('resource_type'),
+            r.get('job_source'),
+            r.get('total_resource_size_gb'),
+            r.get('current_daily_change_gb'),
+            r.get('current_daily_change_pct'),
+            r.get('backup_job_count')
+        ])
+        
+    return output.getvalue()
+
+def format_html(results):
+    """
+    Formats the results as a simple HTML page.
+    """
+    summary = results.get('summary', {})
+    vault_stats = results.get('vault_workloads', {}).get('resource_stats', [])
+    appliance_stats = results.get('appliance_workloads', {}).get('resource_stats', [])
+    all_stats = vault_stats + appliance_stats
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>GCBDR Monitor Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            h1 {{ color: #333; }}
+            .summary {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+            table {{ border-collapse: collapse; width: 100%; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #4CAF50; color: white; }}
+            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            .anomaly {{ color: red; font-weight: bold; }}
+        </style>
+    </head>
+    <body>
+        <h1>GCBDR Monitor Report</h1>
+        
+        <div class="summary">
+            <h2>Summary</h2>
+            <p><strong>Total Jobs:</strong> {summary.get('total_jobs')}</p>
+            <p><strong>Successful:</strong> {summary.get('successful_jobs')}</p>
+            <p><strong>Failed:</strong> {summary.get('failed_jobs')}</p>
+            <p><strong>Anomalies:</strong> {summary.get('anomalies_count')}</p>
+            <p><strong>Total Size:</strong> {summary.get('total_resource_size_gb')} GiB</p>
+            <p><strong>Total Daily Change:</strong> {summary.get('current_daily_change_gb')} GB ({summary.get('current_daily_change_pct')}%)</p>
+        </div>
+        
+        <h2>Resources</h2>
+        <table>
+            <tr>
+                <th>Resource Name</th>
+                <th>Type</th>
+                <th>Source</th>
+                <th>Total Size (GiB)</th>
+                <th>Daily Change (GB)</th>
+                <th>Daily Change (%)</th>
+                <th>Job Count</th>
+            </tr>
+    """
+    
+    for r in all_stats:
+        html += f"""
+            <tr>
+                <td>{r.get('resource_name')}</td>
+                <td>{r.get('resource_type')}</td>
+                <td>{r.get('job_source')}</td>
+                <td>{r.get('total_resource_size_gb')}</td>
+                <td>{r.get('current_daily_change_gb')}</td>
+                <td>{r.get('current_daily_change_pct')}</td>
+                <td>{r.get('backup_job_count')}</td>
+            </tr>
+        """
+        
+    html += """
+        </table>
+    </body>
+    </html>
+    """
+    return html
+
 @app.route("/", methods=["POST", "GET"])
 def index():
     """
@@ -20,6 +122,9 @@ def index():
         # e.g., ?days=7 to analyze past 7 days for stats
         days = int(request.args.get('days', 7))
         filter_name = request.args.get('filter_name')
+        source_type = request.args.get('source_type', 'all')
+        output_format = request.args.get('format', 'json').lower()
+        
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
         
         if not project_id:
@@ -29,9 +134,14 @@ def index():
 
         logger.info(f"Starting GCBDR analysis for project {project_id} with {days} days history")
         
-        results = analyze_backup_jobs(project_id, days, filter_name=filter_name)
+        results = analyze_backup_jobs(project_id, days, filter_name=filter_name, source_type=source_type)
         
-        return jsonify(results), 200
+        if output_format == 'csv':
+            return format_csv(results), 200, {'Content-Type': 'text/csv'}
+        elif output_format == 'html':
+            return format_html(results), 200, {'Content-Type': 'text/html'}
+        else:
+            return jsonify(results), 200
         
     except Exception as e:
         logger.exception("Error during analysis")

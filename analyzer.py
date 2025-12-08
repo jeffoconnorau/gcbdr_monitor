@@ -423,14 +423,28 @@ def matches_filter(name, pattern):
     else:
         return pattern in name
 
-def analyze_backup_jobs(project_id, days=7, filter_name=None):
+def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all'):
     """
     Main orchestration function.
+    source_type: 'all', 'vault', or 'appliance'
     """
+    # Validate source_type
+    if source_type not in ('all', 'vault', 'appliance'):
+        logger.warning(f"Invalid source_type '{source_type}', defaulting to 'all'")
+        source_type = 'all'
+
     # 1. Fetch logs
     # 1. Fetch logs
-    vault_logs = fetch_backup_logs(project_id, days)
-    appliance_logs = fetch_appliance_logs(project_id, days)
+    vault_logs = []
+    appliance_logs = []
+    
+    # Only fetch what we need
+    if source_type in ('all', 'vault'):
+        vault_logs = fetch_backup_logs(project_id, days)
+    
+    if source_type in ('all', 'appliance'):
+        appliance_logs = fetch_appliance_logs(project_id, days)
+        
     gcb_jobs_logs = fetch_gcb_jobs_logs(project_id, days)
     
     parsed_vault_logs = [parse_job_data(e) for e in vault_logs]
@@ -487,14 +501,14 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None):
     logger.info(f"Successful: {len(successful_jobs)}")
     logger.info(f"Failed: {len(failed_jobs)}")
     
-    if not successful_jobs:
-        logger.info("No successful jobs found for analysis.")
+    if not successful_jobs and not failed_jobs and not other_jobs:
+        logger.info("No jobs found for analysis.")
         return {
-            "status": "no_successful_data",
-            "total_jobs": len(all_unique_jobs),
-            "successful_count": len(successful_jobs),
-            "failed_count": len(failed_jobs),
-            "other_count": len(other_jobs)
+            "status": "no_data",
+            "total_jobs": 0,
+            "successful_count": 0,
+            "failed_count": 0,
+            "other_count": 0
         }
 
     # Split into 'today' (or most recent) and 'history'
