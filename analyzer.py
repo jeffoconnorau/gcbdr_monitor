@@ -424,7 +424,7 @@ def analyze_backup_jobs(project_id, days=7):
             "resource_name": res,
             "resource_type": resource_type,
             "total_resource_size_gb": round(total_resource_size_gb, 2),
-            "current_daily_change_gb": round(current_daily_change_gb, 2),
+            "current_daily_change_gb": round(current_daily_change_gb, 4),
             "current_daily_change_pct": round(current_daily_change_pct, 2),
             "backup_job_count": p_data.get('data_points', 0),
             "job_source": "vault" if res in [j['resource_name'] for j in unique_vault_jobs] else "appliance" 
