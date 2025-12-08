@@ -124,10 +124,12 @@ class TestAnalyzer(unittest.TestCase):
         job2 = next(j for j in unique_jobs if j['jobId'] == 'job-2')
         self.assertEqual(job2['status'], 'FAILED')
 
+    @patch('analyzer.fetch_gcb_jobs_logs')
     @patch('analyzer.fetch_appliance_logs')
     @patch('analyzer.fetch_backup_logs')
-    def test_analyze_backup_jobs_counts(self, mock_fetch, mock_fetch_appliance):
+    def test_analyze_backup_jobs_counts(self, mock_fetch, mock_fetch_appliance, mock_fetch_gcb):
         mock_fetch_appliance.return_value = []
+        mock_fetch_gcb.return_value = []
         # Create mock entries
         # History job (2 days ago) - 1GB change
         entry1 = Mock()
@@ -168,11 +170,13 @@ class TestAnalyzer(unittest.TestCase):
         # 1 current + 1 historical = 2 total
         self.assertEqual(stats['backup_job_count'], 2)
 
+    @patch('analyzer.fetch_gcb_jobs_logs')
     @patch('analyzer.fetch_appliance_logs')
     @patch('analyzer.fetch_backup_logs')
     @patch('analyzer.fetch_gce_instance_details')
-    def test_analyze_backup_jobs_gce_fallback(self, mock_fetch_gce, mock_fetch_logs, mock_fetch_appliance):
+    def test_analyze_backup_jobs_gce_fallback(self, mock_fetch_gce, mock_fetch_logs, mock_fetch_appliance, mock_fetch_gcb):
         mock_fetch_appliance.return_value = []
+        mock_fetch_gcb.return_value = []
         # Mock logs with 0 size
         mock_entry = Mock()
         mock_entry.payload = {
@@ -280,3 +284,39 @@ if __name__ == '__main__':
         self.assertEqual(vault_stats['resource_name'], 'vm1')
         self.assertEqual(vault_stats['current_daily_change_gb'], 1.0)
         self.assertEqual(vault_stats['job_source'], 'vault')
+
+    @patch('analyzer.fetch_gcb_jobs_logs')
+    @patch('analyzer.fetch_appliance_logs')
+    @patch('analyzer.fetch_backup_logs')
+    def test_analyze_backup_jobs_enrichment(self, mock_fetch_vault, mock_fetch_appliance, mock_fetch_gcb):
+        # Vault job (empty)
+        mock_fetch_vault.return_value = []
+        
+        # Appliance job with missing size
+        entry_app = Mock()
+        entry_app.payload = {
+            'jobName': 'job-enrich-1',
+            'eventId': 44003,
+            'dataCopiedInBytes': 1073741824, # 1 GiB
+            'sourceSize': 0, # Missing size
+            'appName': 'app-enrich',
+            'appType': 'SQLServer'
+        }
+        entry_app.timestamp = datetime.now(timezone.utc)
+        mock_fetch_appliance.return_value = [entry_app]
+        
+        # GCB job with size
+        entry_gcb = Mock()
+        entry_gcb.payload = {
+            'jobId': 'job-enrich-1',
+            'sourceResourceSizeBytes': 107374182400 # 100 GiB
+        }
+        mock_fetch_gcb.return_value = [entry_gcb]
+        
+        result = analyze_backup_jobs('project-id')
+        
+        # Check if size was enriched
+        app_stats = result['appliance_workloads']['resource_stats'][0]
+        self.assertEqual(app_stats['resource_name'], 'app-enrich')
+        self.assertEqual(app_stats['total_resource_size_gb'], 100.0)
+        self.assertEqual(app_stats['current_daily_change_pct'], 1.0)

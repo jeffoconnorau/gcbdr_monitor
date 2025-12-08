@@ -20,6 +20,11 @@ def inspect_logs(project_id, days=1, log_type="vault"):
         logName="projects/{project_id}/logs/backupdr.googleapis.com%2Fbackup_recovery_appliance_events"
         jsonPayload.eventId = (44003)
         """
+    elif log_type == "gcb_jobs":
+        log_filter = f"""
+        timestamp >= "{start_time.isoformat()}"
+        logName="projects/{project_id}/logs/backupdr.googleapis.com%2Fgcb_backup_recovery_jobs"
+        """
     else:
         log_filter = f"""
         timestamp >= "{start_time.isoformat()}"
@@ -50,7 +55,7 @@ def inspect_logs(project_id, days=1, log_type="vault"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Inspect GCBDR logs.")
-    parser.add_argument("--type", choices=["vault", "appliance"], default="vault", help="Type of logs to inspect")
+    parser.add_argument("--type", choices=["vault", "appliance", "gcb_jobs"], default="vault", help="Type of logs to inspect")
     parser.add_argument("--days", type=int, default=1, help="Days of history to inspect")
     args = parser.parse_args()
 

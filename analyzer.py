@@ -64,6 +64,35 @@ def fetch_appliance_logs(project_id, days):
 
     return entries
 
+def fetch_gcb_jobs_logs(project_id, days):
+    """
+    Queries Cloud Logging for GCBDR GCB backup recovery jobs.
+    Used to enrich appliance logs with missing data (e.g. size).
+    """
+    client = cloud_logging.Client(project=project_id)
+    
+    # Calculate time range
+    now = datetime.now(timezone.utc)
+    start_time = now - timedelta(days=days)
+    
+    # Construct filter for GCB jobs
+    log_filter = f"""
+    timestamp >= "{start_time.isoformat()}"
+    logName="projects/{project_id}/logs/backupdr.googleapis.com%2Fgcb_backup_recovery_jobs"
+    """
+    
+    logger.info(f"Querying GCB jobs logs with filter: {log_filter}")
+    
+    entries = []
+    try:
+        for entry in client.list_entries(filter_=log_filter, page_size=1000):
+            entries.append(entry)
+    except Exception as e:
+        logger.error(f"Failed to fetch GCB jobs logs: {e}")
+        pass
+
+    return entries
+
 def parse_job_data(entry):
     """
     Extracts relevant data from a log entry's jsonPayload.
@@ -156,6 +185,29 @@ def parse_appliance_job_data(entry):
         'timestamp': entry.timestamp,
         'json_payload': payload,
         'job_source': 'appliance'
+    }
+
+def parse_gcb_job_data(entry):
+    """
+    Extracts relevant data from a GCB job log entry.
+    Returns a dict with structured data for enrichment.
+    """
+    payload = entry.payload
+    if not payload:
+        return None
+
+    # Extract fields
+    job_id = payload.get('jobId')
+    
+    total_size_bytes = 0
+    if payload.get('sourceResourceSizeBytes'):
+        total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
+    elif payload.get('usedStorageGib'):
+        total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
+        
+    return {
+        'jobId': job_id,
+        'total_resource_size_bytes': total_size_bytes
     }
 
 def process_jobs(parsed_logs):
@@ -312,9 +364,17 @@ def analyze_backup_jobs(project_id, days=7):
     # 1. Fetch logs
     vault_logs = fetch_backup_logs(project_id, days)
     appliance_logs = fetch_appliance_logs(project_id, days)
+    gcb_jobs_logs = fetch_gcb_jobs_logs(project_id, days)
     
     parsed_vault_logs = [parse_job_data(e) for e in vault_logs]
     parsed_appliance_logs = [parse_appliance_job_data(e) for e in appliance_logs]
+    parsed_gcb_jobs = [parse_gcb_job_data(e) for e in gcb_jobs_logs]
+    
+    # Create lookup map for GCB jobs size
+    gcb_job_size_map = {}
+    for job in parsed_gcb_jobs:
+        if job and job.get('jobId') and job.get('total_resource_size_bytes', 0) > 0:
+            gcb_job_size_map[job['jobId']] = job['total_resource_size_bytes']
     
     # Filter out None values
     parsed_vault_logs = [p for p in parsed_vault_logs if p]
@@ -330,6 +390,14 @@ def analyze_backup_jobs(project_id, days=7):
     for job in parsed_appliance_logs:
         job['status'] = 'SUCCESSFUL'
         job['resource_name'] = job.get('sourceResourceName', 'unknown')
+        
+        # Enrich with GCB job data if size is missing
+        if job.get('total_resource_size_bytes', 0) == 0:
+            job_id = job.get('jobId')
+            if job_id in gcb_job_size_map:
+                job['total_resource_size_bytes'] = gcb_job_size_map[job_id]
+                logger.info(f"Enriched job {job_id} with size {job['total_resource_size_bytes']} from GCB logs")
+        
         unique_appliance_jobs.append(job)
         
     # Combine for total counts, but we might want to analyze them separately or together?
