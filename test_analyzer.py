@@ -157,10 +157,10 @@ class TestAnalyzer(unittest.TestCase):
         
         result = analyze_backup_jobs('project-id')
         
-        self.assertEqual(result['successful_count'], 2)
-        self.assertEqual(len(result['resource_stats']), 1)
+        self.assertEqual(result['summary']['successful_jobs'], 2)
+        self.assertEqual(len(result['aggregate_resource_stats']), 1)
         
-        stats = result['resource_stats'][0]
+        stats = result['aggregate_resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'vm1')
         # 1GB (history) + 2GB (current) = 3GB total / 2 jobs = 1.5 GB avg
         self.assertEqual(stats['current_daily_change_gb'], 1.5) 
@@ -192,7 +192,7 @@ class TestAnalyzer(unittest.TestCase):
         
         result = analyze_backup_jobs('monitoring-project')
         
-        stats = result['resource_stats'][0]
+        stats = result['aggregate_resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'projects/other-project/zones/us-west1-a/instances/vm-gce')
         self.assertEqual(stats['total_resource_size_gb'], 500.0)
         # 1 GB change / 500 GB total = 0.2%
@@ -265,15 +265,18 @@ if __name__ == '__main__':
         
         result = analyze_backup_jobs('project-id')
         
-        self.assertEqual(result['successful_count'], 2)
-        self.assertEqual(len(result['resource_stats']), 2)
+        self.assertEqual(result['summary']['successful_jobs'], 2)
         
         # Check appliance stats
-        app_stats = next(s for s in result['resource_stats'] if s['resource_name'] == 'app1')
+        self.assertEqual(result['appliance_workloads']['successful_jobs'], 1)
+        app_stats = result['appliance_workloads']['resource_stats'][0]
+        self.assertEqual(app_stats['resource_name'], 'app1')
         self.assertEqual(app_stats['current_daily_change_gb'], 2.0)
         self.assertEqual(app_stats['job_source'], 'appliance')
         
         # Check vault stats
-        vault_stats = next(s for s in result['resource_stats'] if s['resource_name'] == 'vm1')
+        self.assertEqual(result['vault_workloads']['successful_jobs'], 1)
+        vault_stats = result['vault_workloads']['resource_stats'][0]
+        self.assertEqual(vault_stats['resource_name'], 'vm1')
         self.assertEqual(vault_stats['current_daily_change_gb'], 1.0)
         self.assertEqual(vault_stats['job_source'], 'vault')

@@ -434,16 +434,43 @@ def analyze_backup_jobs(project_id, days=7):
     # We can add a flag or type to resource_stats to distinguish.
     # I added 'job_source' above.
     
+    # Split resource stats
+    vault_resource_stats = [r for r in resource_stats_list if r['job_source'] == 'vault']
+    appliance_resource_stats = [r for r in resource_stats_list if r['job_source'] == 'appliance']
+    
+    # Calculate counts for vault
+    vault_jobs = unique_vault_jobs
+    vault_successful = [j for j in vault_jobs if j['status'] == 'SUCCESSFUL']
+    vault_failed = [j for j in vault_jobs if j['status'] == 'FAILED']
+    
+    # Calculate counts for appliance
+    appliance_jobs = unique_appliance_jobs
+    appliance_successful = [j for j in appliance_jobs if j['status'] == 'SUCCESSFUL']
+    appliance_failed = [j for j in appliance_jobs if j['status'] == 'FAILED']
+    
     logger.info(f"Found {len(anomalies)} anomalies.")
     
     return {
-        "analyzed_jobs_count": len(current_jobs),
+        "summary": {
+            "total_jobs": len(all_unique_jobs),
+            "successful_jobs": len(successful_jobs),
+            "failed_jobs": len(failed_jobs),
+            "anomalies_count": len(anomalies)
+        },
+        "vault_workloads": {
+            "total_jobs": len(vault_jobs),
+            "successful_jobs": len(vault_successful),
+            "failed_jobs": len(vault_failed),
+            "resource_stats": vault_resource_stats
+        },
+        "appliance_workloads": {
+            "total_jobs": len(appliance_jobs),
+            "successful_jobs": len(appliance_successful),
+            "failed_jobs": len(appliance_failed),
+            "resource_stats": appliance_resource_stats
+        },
         "anomalies": anomalies,
-        "resource_stats": resource_stats_list,
-        "total_jobs_found": len(all_unique_jobs),
-        "successful_count": len(successful_jobs),
-        "failed_count": len(failed_jobs),
-        "other_count": len(other_jobs)
+        "aggregate_resource_stats": resource_stats_list
     }
 
 def fetch_gce_instance_details(project_id, resource_name):
