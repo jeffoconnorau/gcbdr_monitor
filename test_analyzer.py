@@ -292,24 +292,26 @@ if __name__ == '__main__':
         # Vault job (empty)
         mock_fetch_vault.return_value = []
         
-        # Appliance job with missing size
+        # Appliance job with missing size (using sample data structure)
         entry_app = Mock()
         entry_app.payload = {
-            'jobName': 'job-enrich-1',
+            'jobName': 'Job_19729093',
             'eventId': 44003,
             'dataCopiedInBytes': 1073741824, # 1 GiB
             'sourceSize': 0, # Missing size
-            'appName': 'app-enrich',
-            'appType': 'SQLServer'
+            'appName': 'winsql22-01',
+            'appType': 'VMBackup'
         }
         entry_app.timestamp = datetime.now(timezone.utc)
         mock_fetch_appliance.return_value = [entry_app]
         
-        # GCB job with size (using snake_case and insertId)
+        # GCB job with size (using sample data structure)
         entry_gcb = Mock()
-        entry_gcb.insert_id = 'job-enrich-1_appliance-id'
+        entry_gcb.insert_id = '19750232_142253982799'
         entry_gcb.payload = {
-            'resource_data_size_in_gib': 100.0 # 100 GiB
+            'job_name': 'Job_19729093',
+            'resource_data_size_in_gib': 62.12,
+            'data_copied_in_gib': 6.61
         }
         mock_fetch_gcb.return_value = [entry_gcb]
         
@@ -317,6 +319,10 @@ if __name__ == '__main__':
         
         # Check if size was enriched
         app_stats = result['appliance_workloads']['resource_stats'][0]
-        self.assertEqual(app_stats['resource_name'], 'app-enrich')
-        self.assertEqual(app_stats['total_resource_size_gb'], 100.0)
-        self.assertEqual(app_stats['current_daily_change_pct'], 1.0)
+        self.assertEqual(app_stats['resource_name'], 'winsql22-01')
+        self.assertEqual(app_stats['total_resource_size_gb'], 62.12)
+        # 1 GiB change / 62.12 GiB total * 100
+        # 1 GiB = 1073741824 bytes
+        # 62.12 GiB = 66699806638 bytes
+        # 1 / 62.12 * 100 = 1.6097...
+        self.assertAlmostEqual(app_stats['current_daily_change_pct'], 1.61, places=2)

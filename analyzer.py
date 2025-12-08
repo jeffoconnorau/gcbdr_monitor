@@ -197,34 +197,35 @@ def parse_gcb_job_data(entry):
         return None
 
     # Extract fields
-    # Job ID might be in jobName or need to be parsed from insertId
-    job_id = payload.get('jobName')
+    # Use job_name from payload as the primary key for matching
+    job_name = payload.get('job_name')
     
-    if not job_id:
-        # Try to parse from insertId: "jobName_applianceId"
-        # entry.insert_id is usually available, or payload 'insertId'
+    # Fallback to parsing insertId if job_name is missing, though user sample shows it in payload
+    if not job_name:
         insert_id = entry.insert_id or payload.get('insertId')
         if insert_id and '_' in insert_id:
-            job_id = insert_id.split('_')[0]
-    
+            # insertId format in sample: "19750232_142253982799" -> this looks like srcid_applianceId?
+            # User said: "first part is the jobName". But sample job_name is "Job_19729093".
+            # Sample insertId: "19750232_142253982799".
+            # Sample srcid in appliance log: "19750233".
+            # Sample jobName in appliance log: "Job_19729093".
+            # So job_name "Job_19729093" is the common key.
+            pass
+
     total_size_bytes = 0
     
-    # Check for various size fields (including snake_case as per user feedback)
-    if payload.get('sourceResourceSizeBytes'):
+    # Priority: resource_data_size_in_gib > snapshot_disk_size_in_gib > sourceResourceSizeBytes > usedStorageGib
+    if payload.get('resource_data_size_in_gib'):
+        total_size_bytes = int(float(payload.get('resource_data_size_in_gib')) * 1024 * 1024 * 1024)
+    elif payload.get('snapshot_disk_size_in_gib'):
+        total_size_bytes = int(float(payload.get('snapshot_disk_size_in_gib')) * 1024 * 1024 * 1024)
+    elif payload.get('sourceResourceSizeBytes'):
         total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
-    elif payload.get('resource_data_size_in_gib'):
-        total_size_bytes = int(float(payload.get('resource_data_size_in_gib')) * 1024 * 1024 * 1024)
-    elif payload.get('data_copied_in_gib'):
-        # This might be transfer size, but sometimes useful if total size is missing
-        # But usually we want total resource size. 
-        # If resource_data_size_in_gib is missing, maybe this is a fallback?
-        # Let's prioritize resource_data_size_in_gib if available.
-        pass
         
     return {
-        'jobId': job_id,
+        'jobName': job_name,
         'total_resource_size_bytes': total_size_bytes
     }
 
@@ -388,11 +389,11 @@ def analyze_backup_jobs(project_id, days=7):
     parsed_appliance_logs = [parse_appliance_job_data(e) for e in appliance_logs]
     parsed_gcb_jobs = [parse_gcb_job_data(e) for e in gcb_jobs_logs]
     
-    # Create lookup map for GCB jobs size
+    # Create lookup map for GCB jobs size using jobName
     gcb_job_size_map = {}
     for job in parsed_gcb_jobs:
-        if job and job.get('jobId') and job.get('total_resource_size_bytes', 0) > 0:
-            gcb_job_size_map[job['jobId']] = job['total_resource_size_bytes']
+        if job and job.get('jobName') and job.get('total_resource_size_bytes', 0) > 0:
+            gcb_job_size_map[job['jobName']] = job['total_resource_size_bytes']
     
     # Filter out None values
     parsed_vault_logs = [p for p in parsed_vault_logs if p]
@@ -411,10 +412,12 @@ def analyze_backup_jobs(project_id, days=7):
         
         # Enrich with GCB job data if size is missing
         if job.get('total_resource_size_bytes', 0) == 0:
-            job_id = job.get('jobId')
-            if job_id in gcb_job_size_map:
-                job['total_resource_size_bytes'] = gcb_job_size_map[job_id]
-                logger.info(f"Enriched job {job_id} with size {job['total_resource_size_bytes']} from GCB logs")
+            # Try to match by jobName (e.g. "Job_19729093")
+            # The appliance log payload usually has 'jobName'
+            job_name = job.get('json_payload', {}).get('jobName')
+            if job_name and job_name in gcb_job_size_map:
+                job['total_resource_size_bytes'] = gcb_job_size_map[job_name]
+                logger.info(f"Enriched job {job_name} with size {job['total_resource_size_bytes']} from GCB logs")
         
         unique_appliance_jobs.append(job)
         
