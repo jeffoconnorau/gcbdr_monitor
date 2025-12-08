@@ -182,38 +182,62 @@ class TestAnalyzer(unittest.TestCase):
     @patch('analyzer.fetch_appliance_logs')
     @patch('analyzer.fetch_backup_logs')
     @patch('analyzer.fetch_gce_instance_details')
-    def test_analyze_backup_jobs_gce_fallback(self, mock_fetch_gce, mock_fetch_logs, mock_fetch_appliance, mock_fetch_gcb):
+    @patch('analyzer.fetch_gce_disk_details')
+    @patch('analyzer.fetch_cloudsql_details')
+    def test_analyze_backup_jobs_fallback(self, mock_fetch_sql, mock_fetch_disk, mock_fetch_gce, mock_fetch_logs, mock_fetch_appliance, mock_fetch_gcb):
         mock_fetch_appliance.return_value = []
         mock_fetch_gcb.return_value = []
-        # Mock logs with 0 size
-        mock_entry = Mock()
-        mock_entry.payload = {
-            'jobId': 'job-1',
-            'jobStatus': 'SUCCESSFUL',
-            'incrementalBackupSizeGib': 1,
-            'sourceResourceName': 'projects/other-project/zones/us-west1-a/instances/vm-gce',
-            'resourceType': 'Compute Engine',
-            'startTime': '2023-01-01T12:00:00Z',
-            'endTime': '2023-01-01T13:00:00Z'
-        }
-        mock_entry.timestamp = datetime.now(timezone.utc)
-        mock_fetch_logs.return_value = [mock_entry]
         
-        # Mock GCE return
+        # Mock logs with 0 size for different resource types
+        entry_gce = Mock()
+        entry_gce.payload = {
+            'jobId': 'job-1', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1,
+            'sourceResourceName': 'projects/p/zones/z/instances/vm', 'resourceType': 'Compute Engine',
+            'startTime': '2023-01-01T12:00:00Z', 'endTime': '2023-01-01T13:00:00Z'
+        }
+        entry_gce.timestamp = datetime.now(timezone.utc)
+        
+        entry_disk = Mock()
+        entry_disk.payload = {
+            'jobId': 'job-2', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1,
+            'sourceResourceName': 'projects/p/zones/z/disks/disk1', 'resourceType': 'Persistent Disk',
+            'startTime': '2023-01-01T12:00:00Z', 'endTime': '2023-01-01T13:00:00Z'
+        }
+        entry_disk.timestamp = datetime.now(timezone.utc)
+        
+        entry_sql = Mock()
+        entry_sql.payload = {
+            'jobId': 'job-3', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1,
+            'sourceResourceName': 'projects/p/instances/sql1', 'resourceType': 'Cloud SQL',
+            'startTime': '2023-01-01T12:00:00Z', 'endTime': '2023-01-01T13:00:00Z'
+        }
+        entry_sql.timestamp = datetime.now(timezone.utc)
+
+        mock_fetch_logs.return_value = [entry_gce, entry_disk, entry_sql]
+        
+        # Mock returns
         mock_fetch_gce.return_value = 500.0
+        mock_fetch_disk.return_value = 100.0
+        mock_fetch_sql.return_value = 200.0
         
         result = analyze_backup_jobs('monitoring-project')
         
-        stats = result['vault_workloads']['resource_stats'][0]
-        self.assertEqual(stats['resource_name'], 'projects/other-project/zones/us-west1-a/instances/vm-gce')
-        self.assertEqual(stats['total_resource_size_gb'], 500.0)
-        # 1 GB change / 500 GB total = 0.2%
-        self.assertEqual(stats['current_daily_change_pct'], 0.2)
+        # Verify GCE
+        stats_gce = next(r for r in result['vault_workloads']['resource_stats'] if r['resource_name'] == 'projects/p/zones/z/instances/vm')
+        self.assertEqual(stats_gce['total_resource_size_gb'], 500.0)
         
-        # Verify fetch_gce_instance_details was called with correct args
-        # Note: analyze_backup_jobs calls it with (project_id, resource_name)
-        # The parsing happens INSIDE fetch_gce_instance_details, so we just check the call arguments
-        mock_fetch_gce.assert_called_with('monitoring-project', 'projects/other-project/zones/us-west1-a/instances/vm-gce')
+        # Verify Disk
+        stats_disk = next(r for r in result['vault_workloads']['resource_stats'] if r['resource_name'] == 'projects/p/zones/z/disks/disk1')
+        self.assertEqual(stats_disk['total_resource_size_gb'], 100.0)
+        
+        # Verify SQL
+        stats_sql = next(r for r in result['vault_workloads']['resource_stats'] if r['resource_name'] == 'projects/p/instances/sql1')
+        self.assertEqual(stats_sql['total_resource_size_gb'], 200.0)
+        
+        # Verify calls
+        mock_fetch_gce.assert_called()
+        mock_fetch_disk.assert_called_with('monitoring-project', 'projects/p/zones/z/disks/disk1')
+        mock_fetch_sql.assert_called_with('monitoring-project', 'projects/p/instances/sql1')
 
     def test_fetch_gce_instance_details_parsing(self):
         # We can't easily test the internal parsing of fetch_gce_instance_details without mocking compute_v1

@@ -512,22 +512,28 @@ def analyze_backup_jobs(project_id, days=7):
 
         # Fallback to GCE API if size is still 0 and it looks like a GCE resource
         # resource_type in logs is often 'Compute Engine' or 'Disk'
-        if total_resource_size_gb == 0 and resource_type in ('GCE_INSTANCE', 'Compute Engine', 'Disk'):
+        if total_resource_size_gb == 0:
             try:
-                # Assuming resource_name format: projects/{project}/zones/{zone}/instances/{instance}
-                # But log might have it as just the instance name or full path.
-                # We'll pass the raw resource_name to the fetch function which now handles parsing.
-                gce_size = 0
-                if res in gce_cache:
-                    gce_size = gce_cache[res]
-                else:
-                    gce_size = fetch_gce_instance_details(project_id, res)
-                    gce_cache[res] = gce_size
-                
-                if gce_size > 0:
-                    total_resource_size_gb = gce_size
+                if resource_type in ('GCE_INSTANCE', 'Compute Engine'):
+                    gce_size = 0
+                    if res in gce_cache:
+                        gce_size = gce_cache[res]
+                    else:
+                        gce_size = fetch_gce_instance_details(project_id, res)
+                        gce_cache[res] = gce_size
+                    
+                    if gce_size > 0:
+                        total_resource_size_gb = gce_size
+                elif resource_type in ('Disk', 'Persistent Disk'):
+                    disk_size = fetch_gce_disk_details(project_id, res)
+                    if disk_size > 0:
+                        total_resource_size_gb = disk_size
+                elif resource_type in ('Cloud SQL', 'CloudSQL', 'sql-instance', 'SqlInstance'):
+                    sql_size = fetch_cloudsql_details(project_id, res)
+                    if sql_size > 0:
+                        total_resource_size_gb = sql_size
             except Exception as e:
-                logger.warning(f"Failed to fetch GCE details for {res}: {e}")
+                logger.warning(f"Failed to fetch details for {res} ({resource_type}): {e}")
 
         # Recalculate percentages if we have a valid total size (especially if it came from GCE)
         # We map 'avg_daily_change_gb' (period average) to 'current_daily_change_gb' output field
@@ -664,10 +670,71 @@ def fetch_gce_instance_details(project_id, resource_name):
         logger.warning(f"Error fetching GCE details for {instance_name} in {target_project}: {e}")
         return 0
 
-def _calculate_disk_size(instance):
-    total_gb = 0
-    # Boot disk and attached disks
-    if instance.disks:
-        for disk in instance.disks:
-            total_gb += disk.disk_size_gb
     return total_gb
+
+def fetch_gce_disk_details(project_id, resource_name):
+    """
+    Fetches disk details from GCE.
+    """
+    from google.cloud import compute_v1
+    import re
+    
+    target_project = project_id
+    target_zone = None
+    disk_name = resource_name
+    
+    # Regex for disk
+    # projects/{project}/zones/{zone}/disks/{disk}
+    match = re.search(r'projects/([^/]+)/zones/([^/]+)/disks/([^/]+)', resource_name)
+    
+    if match:
+        target_project = match.group(1)
+        target_zone = match.group(2)
+        disk_name = match.group(3)
+    else:
+         # Fallback logic if needed
+         pass
+         
+    if not target_zone:
+        logger.warning(f"Zone not found for disk {resource_name}, cannot fetch details.")
+        return 0
+
+    try:
+        client = compute_v1.DisksClient()
+        disk = client.get(project=target_project, zone=target_zone, disk=disk_name)
+        return disk.size_gb
+    except Exception as e:
+        logger.warning(f"Failed to get disk {disk_name} in zone {target_zone}: {e}")
+        return 0
+
+def fetch_cloudsql_details(project_id, resource_name):
+    """
+    Fetches CloudSQL instance details.
+    """
+    from googleapiclient import discovery
+    import re
+    
+    target_project = project_id
+    instance_name = resource_name
+    
+    # Regex for CloudSQL
+    # projects/{project}/instances/{instance}
+    match = re.search(r'projects/([^/]+)/instances/([^/]+)', resource_name)
+    
+    if match:
+        target_project = match.group(1)
+        instance_name = match.group(2)
+    
+    try:
+        service = discovery.build('sqladmin', 'v1beta4', cache_discovery=False)
+        request = service.instances().get(project=target_project, instance=instance_name)
+        response = request.execute()
+        
+        # dataDiskSizeGb is in settings
+        if 'settings' in response and 'dataDiskSizeGb' in response['settings']:
+            return int(response['settings']['dataDiskSizeGb'])
+        
+        return 0
+    except Exception as e:
+        logger.warning(f"Failed to get CloudSQL instance {instance_name}: {e}")
+        return 0
