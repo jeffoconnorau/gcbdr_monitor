@@ -224,9 +224,16 @@ def parse_gcb_job_data(entry):
     elif payload.get('usedStorageGib'):
         total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
         
+    bytes_transferred = 0
+    if payload.get('data_copied_in_gib'):
+        bytes_transferred = int(float(payload.get('data_copied_in_gib')) * 1024 * 1024 * 1024)
+    elif payload.get('onvault_pool_storage_consumed_in_gib'):
+        bytes_transferred = int(float(payload.get('onvault_pool_storage_consumed_in_gib')) * 1024 * 1024 * 1024)
+
     return {
         'jobName': job_name,
-        'total_resource_size_bytes': total_size_bytes
+        'total_resource_size_bytes': total_size_bytes,
+        'bytes_transferred': bytes_transferred
     }
 
 def process_jobs(parsed_logs):
@@ -389,11 +396,11 @@ def analyze_backup_jobs(project_id, days=7):
     parsed_appliance_logs = [parse_appliance_job_data(e) for e in appliance_logs]
     parsed_gcb_jobs = [parse_gcb_job_data(e) for e in gcb_jobs_logs]
     
-    # Create lookup map for GCB jobs size using jobName
-    gcb_job_size_map = {}
+    # Create lookup map for GCB jobs data using jobName
+    gcb_job_data_map = {}
     for job in parsed_gcb_jobs:
-        if job and job.get('jobName') and job.get('total_resource_size_bytes', 0) > 0:
-            gcb_job_size_map[job['jobName']] = job['total_resource_size_bytes']
+        if job and job.get('jobName'):
+            gcb_job_data_map[job['jobName']] = job
     
     # Filter out None values
     parsed_vault_logs = [p for p in parsed_vault_logs if p]
@@ -410,14 +417,18 @@ def analyze_backup_jobs(project_id, days=7):
         job['status'] = 'SUCCESSFUL'
         job['resource_name'] = job.get('sourceResourceName', 'unknown')
         
-        # Enrich with GCB job data if size is missing
-        if job.get('total_resource_size_bytes', 0) == 0:
-            # Try to match by jobName (e.g. "Job_19729093")
-            # The appliance log payload usually has 'jobName'
-            job_name = job.get('json_payload', {}).get('jobName')
-            if job_name and job_name in gcb_job_size_map:
-                job['total_resource_size_bytes'] = gcb_job_size_map[job_name]
+        # Enrich with GCB job data if missing
+        job_name = job.get('json_payload', {}).get('jobName')
+        if job_name and job_name in gcb_job_data_map:
+            gcb_data = gcb_job_data_map[job_name]
+            
+            if job.get('total_resource_size_bytes', 0) == 0 and gcb_data.get('total_resource_size_bytes', 0) > 0:
+                job['total_resource_size_bytes'] = gcb_data['total_resource_size_bytes']
                 logger.info(f"Enriched job {job_name} with size {job['total_resource_size_bytes']} from GCB logs")
+                
+            if job.get('bytes_transferred', 0) == 0 and gcb_data.get('bytes_transferred', 0) > 0:
+                job['bytes_transferred'] = gcb_data['bytes_transferred']
+                logger.info(f"Enriched job {job_name} with bytes transferred {job['bytes_transferred']} from GCB logs")
         
         unique_appliance_jobs.append(job)
         

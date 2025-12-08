@@ -321,8 +321,9 @@ if __name__ == '__main__':
         app_stats = result['appliance_workloads']['resource_stats'][0]
         self.assertEqual(app_stats['resource_name'], 'winsql22-01')
         self.assertEqual(app_stats['total_resource_size_gb'], 62.12)
-        # 1 GiB change / 62.12 GiB total * 100
-        # 1 GiB = 1073741824 bytes
-        # 62.12 GiB = 66699806638 bytes
-        # 1 / 62.12 * 100 = 1.6097...
-        self.assertAlmostEqual(app_stats['current_daily_change_pct'], 1.61, places=2)
+        
+        # 6.61 GiB transferred
+        self.assertEqual(app_stats['current_daily_change_gb'], 6.61)
+        
+        # 6.61 / 62.12 * 100 = 10.6407...
+        self.assertAlmostEqual(app_stats['current_daily_change_pct'], 10.64, places=2)
