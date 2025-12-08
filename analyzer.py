@@ -548,6 +548,13 @@ def analyze_backup_jobs(project_id, days=7):
     appliance_successful = [j for j in appliance_jobs if j['status'] == 'SUCCESSFUL']
     appliance_failed = [j for j in appliance_jobs if j['status'] == 'FAILED']
     
+    # Calculate aggregate totals
+    agg_total_size_gb = sum(r['total_resource_size_gb'] for r in resource_stats_list)
+    agg_daily_change_gb = sum(r['current_daily_change_gb'] for r in resource_stats_list)
+    agg_daily_change_pct = 0
+    if agg_total_size_gb > 0:
+        agg_daily_change_pct = (agg_daily_change_gb / agg_total_size_gb) * 100
+    
     logger.info(f"Found {len(anomalies)} anomalies.")
     
     return {
@@ -555,7 +562,10 @@ def analyze_backup_jobs(project_id, days=7):
             "total_jobs": len(all_unique_jobs),
             "successful_jobs": len(successful_jobs),
             "failed_jobs": len(failed_jobs),
-            "anomalies_count": len(anomalies)
+            "anomalies_count": len(anomalies),
+            "total_resource_size_gb": round(agg_total_size_gb, 2),
+            "current_daily_change_gb": round(agg_daily_change_gb, 4),
+            "current_daily_change_pct": round(agg_daily_change_pct, 2)
         },
         "vault_workloads": {
             "total_jobs": len(vault_jobs),
@@ -569,8 +579,7 @@ def analyze_backup_jobs(project_id, days=7):
             "failed_jobs": len(appliance_failed),
             "resource_stats": appliance_resource_stats
         },
-        "anomalies": anomalies,
-        "aggregate_resource_stats": resource_stats_list
+        "anomalies": anomalies
     }
 
 def fetch_gce_instance_details(project_id, resource_name):

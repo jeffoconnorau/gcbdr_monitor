@@ -160,9 +160,9 @@ class TestAnalyzer(unittest.TestCase):
         result = analyze_backup_jobs('project-id')
         
         self.assertEqual(result['summary']['successful_jobs'], 2)
-        self.assertEqual(len(result['aggregate_resource_stats']), 1)
+        self.assertEqual(len(result['vault_workloads']['resource_stats']), 1)
         
-        stats = result['aggregate_resource_stats'][0]
+        stats = result['vault_workloads']['resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'vm1')
         # 1GB (history) + 2GB (current) = 3GB total / 2 jobs = 1.5 GB avg
         self.assertEqual(stats['current_daily_change_gb'], 1.5) 
@@ -196,7 +196,7 @@ class TestAnalyzer(unittest.TestCase):
         
         result = analyze_backup_jobs('monitoring-project')
         
-        stats = result['aggregate_resource_stats'][0]
+        stats = result['vault_workloads']['resource_stats'][0]
         self.assertEqual(stats['resource_name'], 'projects/other-project/zones/us-west1-a/instances/vm-gce')
         self.assertEqual(stats['total_resource_size_gb'], 500.0)
         # 1 GB change / 500 GB total = 0.2%
@@ -270,6 +270,12 @@ if __name__ == '__main__':
         result = analyze_backup_jobs('project-id')
         
         self.assertEqual(result['summary']['successful_jobs'], 2)
+        # 100 + 100 = 200 total size
+        self.assertEqual(result['summary']['total_resource_size_gb'], 200.0)
+        # 1 + 2 = 3 total change
+        self.assertEqual(result['summary']['current_daily_change_gb'], 3.0)
+        # 3 / 200 * 100 = 1.5%
+        self.assertEqual(result['summary']['current_daily_change_pct'], 1.5)
         
         # Check appliance stats
         self.assertEqual(result['appliance_workloads']['successful_jobs'], 1)
