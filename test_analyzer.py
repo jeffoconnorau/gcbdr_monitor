@@ -47,20 +47,26 @@ class TestAnalyzer(unittest.TestCase):
 
     def test_detect_anomalies(self):
         stats = {
-            'vm-1': {'avg_bytes': 100.0, 'data_points': 5}
+            'vm-1': {'avg_bytes': 1073741824}, # 1 GiB average
+            'vm-2': {'avg_bytes': 0}
         }
         
         current_jobs = [
-            {'jobId': 'job-1', 'resource_name': 'vm-1', 'bytes_transferred': 110, 'timestamp': datetime.now(timezone.utc)}, # Normal
-            {'jobId': 'job-2', 'resource_name': 'vm-1', 'bytes_transferred': 200, 'timestamp': datetime.now(timezone.utc)}, # Anomaly (2x > 1.5x)
+            {'jobId': 'job-1', 'resource_name': 'vm-1', 'bytes_transferred': 1073741824, 'timestamp': datetime.now(timezone.utc)}, # Normal (1 GiB)
+            {'jobId': 'job-2', 'resource_name': 'vm-1', 'bytes_transferred': 10737418240, 'timestamp': datetime.now(timezone.utc)}, # Anomaly (10 GiB)
             {'jobId': 'job-3', 'resource_name': 'vm-2', 'bytes_transferred': 1000, 'timestamp': datetime.now(timezone.utc)}, # New resource (no stats)
         ]
         
-        anomalies = detect_anomalies(current_jobs, stats, threshold_factor=1.5)
+        anomalies = detect_anomalies(current_jobs, stats)
         
         self.assertEqual(len(anomalies), 1)
         self.assertEqual(anomalies[0]['job_id'], 'job-2')
-        self.assertEqual(anomalies[0]['factor'], 2.0)
+        self.assertEqual(anomalies[0]['gib_transferred'], 10.0)
+        self.assertEqual(anomalies[0]['avg_gib'], 1.0)
+        self.assertEqual(anomalies[0]['factor'], 10.0)
+        # Check metadata
+        self.assertIn('date', anomalies[0])
+        self.assertIn('time', anomalies[0])
 
     def test_parse_job_data(self):
         # Mock entry

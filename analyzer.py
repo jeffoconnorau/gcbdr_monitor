@@ -366,6 +366,7 @@ def calculate_statistics(job_history):
 def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
     """
     Identifies jobs that exceed the average by a certain factor.
+    Returns a list of anomalies with detailed metadata.
     """
     anomalies = []
     for job in current_jobs:
@@ -373,12 +374,28 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
         if resource in stats:
             avg = stats[resource]['avg_bytes']
             if avg > 0 and job['bytes_transferred'] > (avg * threshold_factor):
+                # Format timestamp
+                ts = job['timestamp']
+                # Ensure ts is a datetime object
+                if isinstance(ts, str):
+                    try:
+                        ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    except ValueError:
+                        pass # Keep original if parsing fails, or handle error
+                
+                date_str = ts.strftime('%Y-%m-%d') if isinstance(ts, datetime) else 'unknown'
+                time_str = ts.strftime('%H:%M:%S UTC') if isinstance(ts, datetime) else 'unknown'
+
                 anomalies.append({
                     'job_id': job['jobId'],
                     'resource': resource,
+                    'date': date_str,
+                    'time': time_str,
                     'bytes': job['bytes_transferred'],
                     'avg_bytes': avg,
-                    'factor': job['bytes_transferred'] / avg
+                    'gib_transferred': round(job['bytes_transferred'] / (1024**3), 4),
+                    'avg_gib': round(avg / (1024**3), 4),
+                    'factor': round(job['bytes_transferred'] / avg, 2)
                 })
     return anomalies
 
