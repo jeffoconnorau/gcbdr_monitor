@@ -33,6 +33,37 @@ def fetch_backup_logs(project_id, days):
 
     return entries
 
+def fetch_appliance_logs(project_id, days):
+    """
+    Queries Cloud Logging for GCBDR appliance events (Management Console workloads).
+    Specifically targets eventId 44003 (Successful Job).
+    """
+    client = cloud_logging.Client(project=project_id)
+    
+    # Calculate time range
+    now = datetime.now(timezone.utc)
+    start_time = now - timedelta(days=days)
+    
+    # Construct filter for appliance events
+    log_filter = f"""
+    timestamp >= "{start_time.isoformat()}"
+    logName="projects/{project_id}/logs/backupdr.googleapis.com%2Fbackup_recovery_appliance_events"
+    jsonPayload.eventId = (44003)
+    """
+    
+    logger.info(f"Querying appliance logs with filter: {log_filter}")
+    
+    entries = []
+    try:
+        for entry in client.list_entries(filter_=log_filter, page_size=1000):
+            entries.append(entry)
+    except Exception as e:
+        logger.error(f"Failed to fetch appliance logs: {e}")
+        # Don't raise here, just return empty so we don't block vault logs if this fails
+        pass
+
+    return entries
+
 def parse_job_data(entry):
     """
     Extracts relevant data from a log entry's jsonPayload.
@@ -79,6 +110,52 @@ def parse_job_data(entry):
         'total_resource_size_bytes': total_size_bytes,
         'timestamp': entry.timestamp,
         'json_payload': payload # Keep original payload for reference if needed
+    }
+
+def parse_appliance_job_data(entry):
+    """
+    Extracts relevant data from an appliance log entry (eventId 44003).
+    Returns a dict with structured data.
+    """
+    payload = entry.payload
+    if not payload:
+        return None
+
+    # Mapping fields based on common appliance log structure and assumptions
+    # eventId 44003 implies success
+    
+    # Try to find bytes transferred
+    bytes_transferred = 0
+    if payload.get('dataCopiedInBytes'):
+        bytes_transferred = int(payload.get('dataCopiedInBytes'))
+    elif payload.get('bytesWritten'):
+        bytes_transferred = int(payload.get('bytesWritten'))
+    elif payload.get('transferSize'):
+        bytes_transferred = int(payload.get('transferSize'))
+
+    # Try to find total size
+    total_size_bytes = 0
+    if payload.get('sourceSize'):
+        total_size_bytes = int(payload.get('sourceSize'))
+    elif payload.get('appSize'):
+        total_size_bytes = int(payload.get('appSize'))
+    
+    # Job ID might be jobName or srcid
+    job_id = payload.get('jobName') or payload.get('srcid') or 'unknown_job'
+    
+    return {
+        'jobId': job_id,
+        'jobStatus': 'SUCCESSFUL', # 44003 is success
+        'startTime': payload.get('eventTime') or entry.timestamp.isoformat(), # Use eventTime if available
+        'endTime': payload.get('eventTime') or entry.timestamp.isoformat(), # Point in time event usually
+        'jobCategory': 'ApplianceBackup',
+        'resourceType': payload.get('appType', 'ApplianceWorkload'),
+        'sourceResourceName': payload.get('appName', 'unknown_app'),
+        'bytes_transferred': bytes_transferred,
+        'total_resource_size_bytes': total_size_bytes,
+        'timestamp': entry.timestamp,
+        'json_payload': payload,
+        'job_source': 'appliance'
     }
 
 def process_jobs(parsed_logs):
@@ -232,18 +309,40 @@ def analyze_backup_jobs(project_id, days=7):
     Main orchestration function.
     """
     # 1. Fetch logs
-    all_logs = fetch_backup_logs(project_id, days)
-    parsed_logs = [parse_job_data(e) for e in all_logs]
+    # 1. Fetch logs
+    vault_logs = fetch_backup_logs(project_id, days)
+    appliance_logs = fetch_appliance_logs(project_id, days)
+    
+    parsed_vault_logs = [parse_job_data(e) for e in vault_logs]
+    parsed_appliance_logs = [parse_appliance_job_data(e) for e in appliance_logs]
+    
+    # Filter out None values
+    parsed_vault_logs = [p for p in parsed_vault_logs if p]
+    parsed_appliance_logs = [p for p in parsed_appliance_logs if p]
     
     # 2. Process and deduplicate jobs
-    unique_jobs = process_jobs(parsed_logs)
+    # Vault jobs need deduplication logic (RUNNING -> SUCCESSFUL etc)
+    unique_vault_jobs = process_jobs(parsed_vault_logs)
+    
+    # Appliance jobs (44003) are point-in-time success events, so we treat them as unique successful jobs directly
+    # But we should still standardize them
+    unique_appliance_jobs = []
+    for job in parsed_appliance_logs:
+        job['status'] = 'SUCCESSFUL'
+        job['resource_name'] = job.get('sourceResourceName', 'unknown')
+        unique_appliance_jobs.append(job)
+        
+    # Combine for total counts, but we might want to analyze them separately or together?
+    # User said: "splitting out the reporting, yet also combining the data for aggregate totals"
+    
+    all_unique_jobs = unique_vault_jobs + unique_appliance_jobs
     
     # Filter by status
-    successful_jobs = [j for j in unique_jobs if j['status'] == 'SUCCESSFUL']
-    failed_jobs = [j for j in unique_jobs if j['status'] == 'FAILED']
-    other_jobs = [j for j in unique_jobs if j['status'] not in ('SUCCESSFUL', 'FAILED')]
+    successful_jobs = [j for j in all_unique_jobs if j['status'] == 'SUCCESSFUL']
+    failed_jobs = [j for j in all_unique_jobs if j['status'] == 'FAILED']
+    other_jobs = [j for j in all_unique_jobs if j['status'] not in ('SUCCESSFUL', 'FAILED')]
     
-    logger.info(f"Total unique jobs: {len(unique_jobs)}")
+    logger.info(f"Total unique jobs: {len(all_unique_jobs)}")
     logger.info(f"Successful: {len(successful_jobs)}")
     logger.info(f"Failed: {len(failed_jobs)}")
     
@@ -251,7 +350,7 @@ def analyze_backup_jobs(project_id, days=7):
         logger.info("No successful jobs found for analysis.")
         return {
             "status": "no_successful_data",
-            "total_jobs": len(unique_jobs),
+            "total_jobs": len(all_unique_jobs),
             "successful_count": len(successful_jobs),
             "failed_count": len(failed_jobs),
             "other_count": len(other_jobs)
@@ -327,8 +426,13 @@ def analyze_backup_jobs(project_id, days=7):
             "total_resource_size_gb": round(total_resource_size_gb, 2),
             "current_daily_change_gb": round(current_daily_change_gb, 2),
             "current_daily_change_pct": round(current_daily_change_pct, 2),
-            "backup_job_count": p_data.get('data_points', 0)
+            "backup_job_count": p_data.get('data_points', 0),
+            "job_source": "vault" if res in [j['resource_name'] for j in unique_vault_jobs] else "appliance" 
         })
+    
+    # Separate stats for clearer reporting if needed, but 'resource_stats' contains all.
+    # We can add a flag or type to resource_stats to distinguish.
+    # I added 'job_source' above.
     
     logger.info(f"Found {len(anomalies)} anomalies.")
     
@@ -336,7 +440,7 @@ def analyze_backup_jobs(project_id, days=7):
         "analyzed_jobs_count": len(current_jobs),
         "anomalies": anomalies,
         "resource_stats": resource_stats_list,
-        "total_jobs_found": len(unique_jobs),
+        "total_jobs_found": len(all_unique_jobs),
         "successful_count": len(successful_jobs),
         "failed_count": len(failed_jobs),
         "other_count": len(other_jobs)
