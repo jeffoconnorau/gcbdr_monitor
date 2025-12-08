@@ -389,6 +389,7 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
                 anomalies.append({
                     'job_id': job['jobId'],
                     'resource': resource,
+                    'resource_type': job.get('resourceType', 'UNKNOWN'),
                     'date': date_str,
                     'time': time_str,
                     'bytes': job['bytes_transferred'],

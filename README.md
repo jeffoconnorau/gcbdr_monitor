@@ -110,7 +110,32 @@ The analysis returns a JSON object with the following structure:
     "failed_jobs": 1,
     "resource_stats": [ ... ]
   },
-  "anomalies": []
+  "anomalies": [
+    {
+      "avg_bytes": 2684354.5,
+      "avg_gib": 0.0025,
+      "bytes": 10737418,
+      "date": "2025-12-08",
+      "factor": 4.0,
+      "gib_transferred": 0.01,
+      "job_id": "Job_19704112",
+      "resource": "sql-cg2",
+      "resource_type": "GCE_INSTANCE",
+      "time": "02:53:15 UTC"
+    },
+    {
+      "avg_bytes": 3579139.3333333335,
+      "avg_gib": 0.0033,
+      "bytes": 21474836,
+      "date": "2025-12-08",
+      "factor": 6.0,
+      "gib_transferred": 0.02,
+      "job_id": "Job_19704041",
+      "resource": "WINSQL22-02",
+      "resource_type": "GCE_INSTANCE",
+      "time": "02:53:15 UTC"
+    }
+  ]
 }
 ```
 
