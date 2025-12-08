@@ -4,7 +4,9 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
 
 ## Features
 
-- **Log Analysis**: Queries Cloud Logging for GCBDR backup job logs using structured filters.
+- **Multi-Workload Support**: Monitors both **Backup Vault** workloads and **Management Console** (Appliance) workloads.
+- **Log Enrichment**: Automatically enriches Appliance logs with missing size and transfer data by correlating with GCB Jobs logs.
+- **Split Reporting**: Provides distinct analysis for Vault and Appliance workloads while maintaining an aggregate summary.
 - **Enhanced Reporting**: Provides detailed statistics for each protected resource, including:
     - Current Daily Change Rate (GB and %)
     - Total Resource Size (GiB)
@@ -23,7 +25,7 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
 
 ## Metrics Explained
 
-- **Total Resource Size (GiB)**: The total size of the protected resource. If not found in backup logs, it is fetched directly from the Compute Engine API (for GCE instances).
+- **Total Resource Size (GiB)**: The total size of the protected resource. If not found in backup logs, it is fetched from GCB Jobs logs (for appliances) or directly from the Compute Engine API (for GCE instances).
 - **Current Daily Change Rate (GB)**: The average daily change rate calculated over the requested reporting period (default 7 days).
 - **Current Daily Change Rate (%)**: (Current Daily Change GB / Total Resource Size GB) * 100.
 - **Backup Job Count**: The total number of successful backup jobs for the resource in the analyzed period.
@@ -66,7 +68,53 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     ```
     - `days`: (Optional) Number of days of history to analyze (default: 7).
 
-### Deploying to Cloud Run
+### Inspecting Logs
+
+Use the `inspect_logs.py` utility to view raw log entries and verify data:
+
+```bash
+# Inspect Backup Vault logs (default)
+python inspect_logs.py --type vault
+
+# Inspect Appliance logs
+python inspect_logs.py --type appliance
+
+# Inspect GCB Jobs logs (used for enrichment)
+python inspect_logs.py --type gcb_jobs
+```
+
+### Output Structure
+
+The analysis returns a JSON object with the following structure:
+
+```json
+{
+  "summary": {
+    "total_jobs": 100,
+    "successful_jobs": 98,
+    "failed_jobs": 2,
+    "anomalies_count": 0,
+    "total_resource_size_gb": 5000.00,
+    "current_daily_change_gb": 50.0000,
+    "current_daily_change_pct": 1.00
+  },
+  "vault_workloads": {
+    "total_jobs": 50,
+    "successful_jobs": 49,
+    "failed_jobs": 1,
+    "resource_stats": [ ... ]
+  },
+  "appliance_workloads": {
+    "total_jobs": 50,
+    "successful_jobs": 49,
+    "failed_jobs": 1,
+    "resource_stats": [ ... ]
+  },
+  "anomalies": []
+}
+```
+
+## Deploying to Cloud Run
 
 1.  **Build the Container:**
     ```bash
