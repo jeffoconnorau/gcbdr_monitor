@@ -401,7 +401,29 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
                 })
     return anomalies
 
-def analyze_backup_jobs(project_id, days=7):
+def matches_filter(name, pattern):
+    """
+    Checks if name matches the pattern.
+    Case-insensitive.
+    Supports wildcards via fnmatch.
+    If no wildcards, does a substring check.
+    """
+    if not pattern:
+        return True
+    if not name:
+        return False
+        
+    import fnmatch
+    
+    name = name.lower()
+    pattern = pattern.lower()
+    
+    if any(c in pattern for c in ['*', '?', '[']):
+        return fnmatch.fnmatch(name, pattern)
+    else:
+        return pattern in name
+
+def analyze_backup_jobs(project_id, days=7, filter_name=None):
     """
     Main orchestration function.
     """
@@ -555,6 +577,12 @@ def analyze_backup_jobs(project_id, days=7):
             "job_source": "vault" if res in [j['resource_name'] for j in unique_vault_jobs] else "appliance" 
         })
     
+    # APPLY FILTERING HERE
+    if filter_name:
+        logger.info(f"Filtering results with pattern: {filter_name}")
+        resource_stats_list = [r for r in resource_stats_list if matches_filter(r['resource_name'], filter_name)]
+        anomalies = [a for a in anomalies if matches_filter(a['resource'], filter_name)]
+    
     # Separate stats for clearer reporting if needed, but 'resource_stats' contains all.
     # We can add a flag or type to resource_stats to distinguish.
     # I added 'job_source' above.
@@ -564,6 +592,19 @@ def analyze_backup_jobs(project_id, days=7):
     appliance_resource_stats = [r for r in resource_stats_list if r['job_source'] == 'appliance']
     
     # Calculate counts for vault
+    # We need to filter the jobs lists too if we want the counts to match the filtered resources?
+    # The user asked to "search for a specific resource... return in the results only".
+    # So the counts should probably reflect the filtered view or we should clarify.
+    # Usually "results" implies the list of resources. The summary counts might be confusing if they show totals but the list is empty.
+    # Let's filter the jobs lists as well for consistency in the summary.
+    
+    if filter_name:
+        unique_vault_jobs = [j for j in unique_vault_jobs if matches_filter(j.get('resource_name'), filter_name)]
+        unique_appliance_jobs = [j for j in unique_appliance_jobs if matches_filter(j.get('resource_name'), filter_name)]
+        all_unique_jobs = unique_vault_jobs + unique_appliance_jobs
+        successful_jobs = [j for j in successful_jobs if matches_filter(j.get('resource_name'), filter_name)]
+        failed_jobs = [j for j in failed_jobs if matches_filter(j.get('resource_name'), filter_name)]
+    
     vault_jobs = unique_vault_jobs
     vault_successful = [j for j in vault_jobs if j['status'] == 'SUCCESSFUL']
     vault_failed = [j for j in vault_jobs if j['status'] == 'FAILED']

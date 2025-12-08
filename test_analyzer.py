@@ -364,3 +364,63 @@ if __name__ == '__main__':
         
         # 6.61 / 62.12 * 100 = 10.6407...
         self.assertAlmostEqual(app_stats['current_daily_change_pct'], 10.64, places=2)
+
+    def test_matches_filter(self):
+        from analyzer import matches_filter
+        
+        # Exact match
+        self.assertTrue(matches_filter("test-vm", "test-vm"))
+        self.assertTrue(matches_filter("TEST-VM", "test-vm")) # Case insensitive
+        
+        # Substring (implicit wildcard)
+        self.assertTrue(matches_filter("my-test-vm", "test"))
+        self.assertFalse(matches_filter("my-vm", "test"))
+        
+        # Wildcard
+        self.assertTrue(matches_filter("test-vm-1", "test*"))
+        self.assertTrue(matches_filter("test-vm-1", "*vm*"))
+        self.assertTrue(matches_filter("test-vm-1", "test-vm-?"))
+        self.assertFalse(matches_filter("prod-vm-1", "test*"))
+        
+        # None/Empty
+        self.assertTrue(matches_filter("anything", None))
+        self.assertTrue(matches_filter("anything", ""))
+        self.assertFalse(matches_filter(None, "pattern"))
+
+    @patch('analyzer.fetch_gcb_jobs_logs')
+    @patch('analyzer.fetch_appliance_logs')
+    @patch('analyzer.fetch_backup_logs')
+    def test_analyze_backup_jobs_filtering(self, mock_fetch_vault, mock_fetch_appliance, mock_fetch_gcb):
+        mock_fetch_appliance.return_value = []
+        mock_fetch_gcb.return_value = []
+        
+        # Create jobs for different resources
+        entry1 = Mock()
+        entry1.payload = {
+            'jobId': 'j1', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1, 
+            'sourceResourceSizeBytes': 100, 'sourceResourceName': 'sql-db-1', 'resourceType': 'Cloud SQL'
+        }
+        entry1.timestamp = datetime.now(timezone.utc)
+        
+        entry2 = Mock()
+        entry2.payload = {
+            'jobId': 'j2', 'jobStatus': 'SUCCESSFUL', 'incrementalBackupSizeGib': 1, 
+            'sourceResourceSizeBytes': 100, 'sourceResourceName': 'web-server-1', 'resourceType': 'GCE_INSTANCE'
+        }
+        entry2.timestamp = datetime.now(timezone.utc)
+        
+        mock_fetch_vault.return_value = [entry1, entry2]
+        
+        # Test with filter "sql"
+        result = analyze_backup_jobs('project-id', filter_name='sql')
+        
+        self.assertEqual(result['summary']['successful_jobs'], 1)
+        self.assertEqual(len(result['vault_workloads']['resource_stats']), 1)
+        self.assertEqual(result['vault_workloads']['resource_stats'][0]['resource_name'], 'sql-db-1')
+        
+        # Test with wildcard "*server*"
+        result = analyze_backup_jobs('project-id', filter_name='*server*')
+        
+        self.assertEqual(result['summary']['successful_jobs'], 1)
+        self.assertEqual(len(result['vault_workloads']['resource_stats']), 1)
+        self.assertEqual(result['vault_workloads']['resource_stats'][0]['resource_name'], 'web-server-1')

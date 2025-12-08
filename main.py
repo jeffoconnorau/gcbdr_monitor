@@ -19,6 +19,7 @@ def index():
         # Parse optional parameters from request
         # e.g., ?days=7 to analyze past 7 days for stats
         days = int(request.args.get('days', 7))
+        filter_name = request.args.get('filter_name')
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
         
         if not project_id:
@@ -28,7 +29,7 @@ def index():
 
         logger.info(f"Starting GCBDR analysis for project {project_id} with {days} days history")
         
-        results = analyze_backup_jobs(project_id, days)
+        results = analyze_backup_jobs(project_id, days, filter_name=filter_name)
         
         return jsonify(results), 200
         
