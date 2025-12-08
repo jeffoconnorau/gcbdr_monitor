@@ -112,17 +112,17 @@ The analysis returns a JSON object with the following structure:
   },
   "anomalies": [
     {
-      "avg_bytes": 2684354.5,
-      "avg_gib": 0.0025,
-      "bytes": 10737418,
+      "avg_bytes": 1836098519.0,
+      "avg_gib": 1.71,
+      "bytes": 7097433456,
       "date": "2025-12-08",
-      "factor": 4.0,
-      "gib_transferred": 0.01,
-      "job_id": "Job_19704112",
-      "resource": "sql-cg2",
-      "resource_type": "GCE_INSTANCE",
-      "time": "02:53:15 UTC",
-      "total_resource_size_gb": 100.0
+      "factor": 3.87,
+      "gib_transferred": 6.61,
+      "job_id": "Job_19729093",
+      "resource": "winsql22-01",
+      "resource_type": "VMBackup",
+      "time": "06:39:24 UTC",
+      "total_resource_size_gb": 62.12
     },
     {
       "avg_bytes": 3579139.3333333335,
