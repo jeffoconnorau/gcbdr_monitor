@@ -670,6 +670,12 @@ def fetch_gce_instance_details(project_id, resource_name):
         logger.warning(f"Error fetching GCE details for {instance_name} in {target_project}: {e}")
         return 0
 
+def _calculate_disk_size(instance):
+    total_gb = 0
+    # Boot disk and attached disks
+    if instance.disks:
+        for disk in instance.disks:
+            total_gb += disk.disk_size_gb
     return total_gb
 
 def fetch_gce_disk_details(project_id, resource_name):

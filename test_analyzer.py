@@ -239,10 +239,9 @@ class TestAnalyzer(unittest.TestCase):
         mock_fetch_disk.assert_called_with('monitoring-project', 'projects/p/zones/z/disks/disk1')
         mock_fetch_sql.assert_called_with('monitoring-project', 'projects/p/instances/sql1')
 
-    def test_fetch_gce_instance_details_parsing(self):
-        # We can't easily test the internal parsing of fetch_gce_instance_details without mocking compute_v1
-        # But we can verify it doesn't crash
-        pass
+    def test_internal_functions_exist(self):
+        from analyzer import _calculate_disk_size
+        self.assertTrue(callable(_calculate_disk_size))
 
 if __name__ == '__main__':
     unittest.main()
