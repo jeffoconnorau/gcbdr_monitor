@@ -47,8 +47,18 @@ class TestAnalyzer(unittest.TestCase):
 
     def test_detect_anomalies(self):
         stats = {
-            'vm-1': {'avg_bytes': 1073741824}, # 1 GiB average
-            'vm-2': {'avg_bytes': 0}
+            'vm-1': {
+                'avg_bytes': 1073741824, # 1 GiB average
+                'stdev_bytes': 0,
+                'avg_duration': 0,
+                'stdev_duration': 0
+            },
+            'vm-2': {
+                'avg_bytes': 0,
+                'stdev_bytes': 0,
+                'avg_duration': 0,
+                'stdev_duration': 0
+            }
         }
         
         current_jobs = [
@@ -63,7 +73,9 @@ class TestAnalyzer(unittest.TestCase):
         self.assertEqual(anomalies[0]['job_id'], 'job-2')
         self.assertEqual(anomalies[0]['gib_transferred'], 10.0)
         self.assertEqual(anomalies[0]['avg_gib'], 1.0)
-        self.assertEqual(anomalies[0]['factor'], 10.0)
+        self.assertEqual(anomalies[0]['gib_transferred'], 10.0)
+        self.assertEqual(anomalies[0]['avg_gib'], 1.0)
+        # self.assertEqual(anomalies[0]['factor'], 10.0) # Factor removed in favor of reasons
         # Check metadata
         self.assertIn('date', anomalies[0])
         self.assertIn('time', anomalies[0])
@@ -478,3 +490,51 @@ if __name__ == '__main__':
         mock_fetch_vault.reset_mock()
         analyze_backup_jobs('project-id', source_type='appliance')
         mock_fetch_vault.assert_not_called()
+
+    def test_detect_advanced_anomalies(self):
+        # Setup stats with variance
+        stats = {
+            'vm-1': {
+                'avg_bytes': 1000, 
+                'stdev_bytes': 100, # Low variance
+                'avg_duration': 60,
+                'stdev_duration': 5
+            },
+            'vm-2': {
+                'avg_bytes': 1000000000, # 1GB
+                'stdev_bytes': 0,
+                'avg_duration': 60,
+                'stdev_duration': 0
+            }
+        }
+        
+        current_jobs = [
+            # 1. Size Spike (Z-Score)
+            # 1000 + (4 * 100) = 1400 -> Z=4
+            {'jobId': 'j1', 'resource_name': 'vm-1', 'bytes_transferred': 1400, 'duration_seconds': 60, 'timestamp': datetime.now(timezone.utc)},
+            
+            # 2. Duration Spike (Z-Score)
+            # 60 + (4 * 5) = 80 -> Z=4
+            {'jobId': 'j2', 'resource_name': 'vm-1', 'bytes_transferred': 1000, 'duration_seconds': 80, 'timestamp': datetime.now(timezone.utc)},
+            
+            # 3. Drop-off
+            # 1GB -> 10MB (1%)
+            {'jobId': 'j3', 'resource_name': 'vm-2', 'bytes_transferred': 10000000, 'duration_seconds': 60, 'timestamp': datetime.now(timezone.utc)},
+            
+            # 4. Normal
+            {'jobId': 'j4', 'resource_name': 'vm-1', 'bytes_transferred': 1000, 'duration_seconds': 60, 'timestamp': datetime.now(timezone.utc)},
+        ]
+        
+        anomalies = detect_anomalies(current_jobs, stats)
+        
+        self.assertEqual(len(anomalies), 3)
+        
+        # Check reasons
+        a1 = next(a for a in anomalies if a['job_id'] == 'j1')
+        self.assertIn("Size Spike (Z=4.0)", a1['reasons'])
+        
+        a2 = next(a for a in anomalies if a['job_id'] == 'j2')
+        self.assertIn("Duration Spike (Z=4.0)", a2['reasons'])
+        
+        a3 = next(a for a in anomalies if a['job_id'] == 'j3')
+        self.assertIn("Size Drop-off", a3['reasons'])

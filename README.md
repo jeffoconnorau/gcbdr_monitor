@@ -86,6 +86,31 @@ python inspect_logs.py --type appliance
 python inspect_logs.py --type gcb_jobs
 ```
 
+### Anomaly Detection
+
+The tool automatically detects anomalies in backup jobs using advanced statistical analysis:
+
+1.  **Size Spikes (Z-Score)**: Flags jobs where the data transferred is significantly higher than the historical average (> 3 standard deviations).
+2.  **Size Drop-offs**: Flags jobs where the data transferred is suspiciously small (< 10% of the average), which might indicate an empty source or configuration issue.
+3.  **Duration Spikes**: Flags jobs that take significantly longer than usual (> 3 standard deviations).
+
+Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field explaining the cause (e.g., "Size Spike (Z=4.2)", "Size Drop-off").
+
+Example Anomaly Output (JSON):
+```json
+{
+  "job_id": "job-123",
+  "resource": "web-server-1",
+  "date": "2023-10-27",
+  "time": "10:00:00 UTC",
+  "gib_transferred": 50.5,
+  "avg_gib": 10.2,
+  "duration_seconds": 3600,
+  "avg_duration_seconds": 600,
+  "reasons": "Size Spike (Z=4.0), Duration Spike (Z=5.0)"
+}
+```
+
 ### Output Structure
 
 The analysis returns a JSON object with the following structure:

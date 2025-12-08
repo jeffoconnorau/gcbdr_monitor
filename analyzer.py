@@ -326,6 +326,8 @@ def calculate_statistics(job_history):
     Computes average change rate per resource.
     Returns a dict with resource stats.
     """
+    import statistics
+    
     stats = {}
     for job in job_history:
         resource = job['resource_name']
@@ -335,13 +337,17 @@ def calculate_statistics(job_history):
                 'count': 0, 
                 'total_size_sum': 0,
                 'resource_type': job.get('resourceType', 'UNKNOWN'),
-                'timestamps': []
+                'timestamps': [],
+                'bytes_values': [],
+                'duration_values': []
             }
         
         stats[resource]['total_bytes'] += job['bytes_transferred']
         stats[resource]['total_size_sum'] += job.get('total_resource_size_bytes', 0)
         stats[resource]['count'] += 1
         stats[resource]['timestamps'].append(job['timestamp'])
+        stats[resource]['bytes_values'].append(job['bytes_transferred'])
+        stats[resource]['duration_values'].append(job.get('duration_seconds', 0))
     
     results = {}
     for resource, data in stats.items():
@@ -349,39 +355,90 @@ def calculate_statistics(job_history):
             avg_bytes = data['total_bytes'] / data['count']
             avg_total_size = data['total_size_sum'] / data['count']
             
+            # Calculate StDev
+            stdev_bytes = 0
+            if data['count'] > 1:
+                stdev_bytes = statistics.stdev(data['bytes_values'])
+            
+            # Calculate Duration stats
+            avg_duration = 0
+            stdev_duration = 0
+            if data['duration_values']:
+                avg_duration = sum(data['duration_values']) / len(data['duration_values'])
+                if len(data['duration_values']) > 1:
+                    stdev_duration = statistics.stdev(data['duration_values'])
+            
             avg_daily_change_pct = 0
             if avg_total_size > 0:
                 avg_daily_change_pct = (avg_bytes / avg_total_size) * 100
                 
             results[resource] = {
                 'avg_bytes': avg_bytes,
+                'stdev_bytes': stdev_bytes,
                 'avg_daily_change_gb': avg_bytes / (1024 * 1024 * 1024),
                 'avg_daily_change_pct': avg_daily_change_pct,
                 'avg_total_size_gb': avg_total_size / (1024 * 1024 * 1024),
                 'resource_type': data['resource_type'],
-                'data_points': data['count']
+                'data_points': data['count'],
+                'avg_duration': avg_duration,
+                'stdev_duration': stdev_duration
             }
     return results
 
-def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
+def detect_anomalies(current_jobs, stats, z_score_threshold=3.0, drop_off_threshold=0.1):
     """
-    Identifies jobs that exceed the average by a certain factor.
-    Returns a list of anomalies with detailed metadata.
+    Identifies jobs that are statistical outliers.
+    Checks:
+    1. Size Z-Score > 3.0
+    2. Size Drop-off < 10% of average (if average > 1GB to avoid noise)
+    3. Duration Z-Score > 3.0
     """
+    from datetime import datetime, timezone, timedelta
     anomalies = []
     for job in current_jobs:
         resource = job['resource_name']
         if resource in stats:
-            avg = stats[resource]['avg_bytes']
-            if avg > 0 and job['bytes_transferred'] > (avg * threshold_factor):
+            s = stats[resource]
+            avg_bytes = s['avg_bytes']
+            stdev_bytes = s['stdev_bytes']
+            avg_duration = s['avg_duration']
+            stdev_duration = s['stdev_duration']
+            
+            bytes_transferred = job['bytes_transferred']
+            duration = job.get('duration_seconds', 0)
+            
+            reasons = []
+            
+            # 1. Size Z-Score (High)
+            # Only if we have variance (stdev > 0)
+            if stdev_bytes > 0:
+                z_score_size = (bytes_transferred - avg_bytes) / stdev_bytes
+                if z_score_size > z_score_threshold:
+                    reasons.append(f"Size Spike (Z={z_score_size:.1f})")
+            elif avg_bytes > 0 and bytes_transferred > (avg_bytes * 1.5):
+                # Fallback to simple factor if no variance history yet (e.g. only 1 previous job)
+                reasons.append(f"Size Spike (Factor={bytes_transferred/avg_bytes:.1f}x)")
+
+            # 2. Size Drop-off (Low)
+            # Only check if average is significant (> 100MB) to avoid noise on tiny files
+            if avg_bytes > 100 * 1024 * 1024:
+                if bytes_transferred < (avg_bytes * drop_off_threshold):
+                    reasons.append(f"Size Drop-off ({bytes_transferred/avg_bytes*100:.1f}% of avg)")
+
+            # 3. Duration Z-Score (High)
+            if stdev_duration > 0:
+                z_score_duration = (duration - avg_duration) / stdev_duration
+                if z_score_duration > z_score_threshold:
+                    reasons.append(f"Duration Spike (Z={z_score_duration:.1f})")
+            
+            if reasons:
                 # Format timestamp
                 ts = job['timestamp']
-                # Ensure ts is a datetime object
                 if isinstance(ts, str):
                     try:
                         ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                     except ValueError:
-                        pass # Keep original if parsing fails, or handle error
+                        pass
                 
                 date_str = ts.strftime('%Y-%m-%d') if isinstance(ts, datetime) else 'unknown'
                 time_str = ts.strftime('%H:%M:%S UTC') if isinstance(ts, datetime) else 'unknown'
@@ -393,11 +450,13 @@ def detect_anomalies(current_jobs, stats, threshold_factor=1.5):
                     'total_resource_size_gb': round(job.get('total_resource_size_bytes', 0) / (1024**3), 2),
                     'date': date_str,
                     'time': time_str,
-                    'bytes': job['bytes_transferred'],
-                    'avg_bytes': avg,
-                    'gib_transferred': round(job['bytes_transferred'] / (1024**3), 4),
-                    'avg_gib': round(avg / (1024**3), 4),
-                    'factor': round(job['bytes_transferred'] / avg, 2)
+                    'bytes': bytes_transferred,
+                    'avg_bytes': avg_bytes,
+                    'gib_transferred': round(bytes_transferred / (1024**3), 4),
+                    'avg_gib': round(avg_bytes / (1024**3), 4),
+                    'duration_seconds': duration,
+                    'avg_duration_seconds': avg_duration,
+                    'reasons': ", ".join(reasons)
                 })
     return anomalies
 
