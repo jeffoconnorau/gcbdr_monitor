@@ -147,6 +147,61 @@ You can also suppress notifications for a specific run by adding `&notify=false`
     - This often happens behind corporate proxies or firewalls that intercept SSL traffic.
     - **Fix:** Set `GCBDR_MONITOR_SKIP_SSL_VERIFY=true` to bypass verification (use with caution).
 
+#### Troubleshooting Deployment
+
+**Permission Errors (CLI/Cloud Build):**
+- **Symptom:** `Error 403: ... permission denied` during build or push.
+- **Fix:** Gran the following roles to your **Compute Engine Default Service Account** (which Cloud Build often uses by default) or your specific Cloud Build service account.
+  
+  Replace `[PROJECT_NUMBER]` with your Google Cloud Project Number.
+  ```bash
+  # 1. Grant Log Writer (allows writing build logs)
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/logging.logWriter
+
+  # 2. Grant Artifact Registry Admin (allows creating/pushing attributes)
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/artifactregistry.repoAdmin
+  
+  # 3. Grant Create-on-Push Writer (required for first-time repo creation)
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/artifactregistry.createOnPushWriter
+  ```
+
+**Runtime Errors (Cloud Run):**
+- **Symptom:** `Internal Server Error: 403 Permission denied for all log views`
+- **Fix:** The Cloud Run service account needs permission to *read* logs.
+  ```bash
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/logging.viewer
+  ```
+
+**Cloud Run Deployment Errors:**
+- **Symptom:** `Deployment failed ... Retry` or image not found errors.
+- **Cause:** Often due to using a placeholder ID in the image URL (e.g., `gcr.io/your-project-id/...`).
+- **Fix:** Ensure you replace `your-project-id` with your *actual* Project ID.
+  ```bash
+  gcloud run deploy gcbdr-monitor \
+      --image gcr.io/$GOOGLE_CLOUD_PROJECT/gcbdr-monitor \
+      --platform managed \
+      --region us-central1 \
+      --allow-unauthenticated \
+      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT
+  ```
+
+- **Symptom:** `GOOGLE_CLOUD_PROJECT environment variable not set`
+- **Fix:** You must explicitly set this variable (and others) during deployment.
+  ```bash
+  gcloud run services update gcbdr-monitor \
+      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT \
+      --region us-central1
+  ```
+  *(Add other variables like `GOOGLE_CHAT_WEBHOOK`, `SMTP_HOST`, etc. to this command using comma separation usually, or repeated flags).*
+
 ### Output Structure
 
 The analysis returns a JSON object with the following structure:
