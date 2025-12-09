@@ -50,11 +50,13 @@ class GoogleChatNotifier(NotifierBase):
             
             # Create SSL context
             # Allow disabling verification if needed (e.g. corporate proxies breaking chain)
-            if os.environ.get('GCBDR_MONITOR_SKIP_SSL_VERIFY', '').lower() == 'true':
+            skip_verify = os.environ.get('GCBDR_MONITOR_SKIP_SSL_VERIFY', '').lower() == 'true'
+            
+            if skip_verify:
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
-                logger.warning("SSL verification disabled for Google Chat webhook")
+                logger.info("SSL verification disabled by configuration (GCBDR_MONITOR_SKIP_SSL_VERIFY=true)")
             else:
                 ctx = ssl.create_default_context()
             
@@ -62,6 +64,8 @@ class GoogleChatNotifier(NotifierBase):
                 logger.info(f"Sent {len(anomalies)} anomalies to Google Chat. Status: {response.status}")
         except Exception as e:
             logger.error(f"Failed to send to Google Chat: {e}")
+            if "CERTIFICATE_VERIFY_FAILED" in str(e) and not skip_verify:
+                logger.info("HINT: You can disable SSL verification by setting GCBDR_MONITOR_SKIP_SSL_VERIFY=true if you are dealing with a self-signed cert or proxy.")
 
     def _create_card(self, anomaly):
         # Determine color based on reasons (simple heuristic)
