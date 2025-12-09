@@ -79,13 +79,13 @@ Use the `inspect_logs.py` utility to view raw log entries and verify data:
 
 ```bash
 # Inspect Backup Vault logs (default)
-python inspect_logs.py --type vault
+python scripts/inspect_logs.py --type vault
 
 # Inspect Appliance logs
-python inspect_logs.py --type appliance
+python scripts/inspect_logs.py --type appliance
 
 # Inspect GCB Jobs logs (used for enrichment)
-python inspect_logs.py --type gcb_jobs
+python scripts/inspect_logs.py --type gcb_jobs
 ```
 
 ### Anomaly Detection
