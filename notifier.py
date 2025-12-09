@@ -2,6 +2,7 @@ import os
 import logging
 import json
 import urllib.request
+import ssl
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -46,7 +47,18 @@ class GoogleChatNotifier(NotifierBase):
                 data=json.dumps(message).encode('utf-8'),
                 headers={'Content-Type': 'application/json'}
             )
-            with urllib.request.urlopen(req) as response:
+            
+            # Create SSL context
+            # Allow disabling verification if needed (e.g. corporate proxies breaking chain)
+            if os.environ.get('GCBDR_MONITOR_SKIP_SSL_VERIFY', '').lower() == 'true':
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                logger.warning("SSL verification disabled for Google Chat webhook")
+            else:
+                ctx = ssl.create_default_context()
+            
+            with urllib.request.urlopen(req, context=ctx) as response:
                 logger.info(f"Sent {len(anomalies)} anomalies to Google Chat. Status: {response.status}")
         except Exception as e:
             logger.error(f"Failed to send to Google Chat: {e}")

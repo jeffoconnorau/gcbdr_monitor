@@ -120,6 +120,7 @@ Set the following environment variables to enable notifications:
 
 **Google Chat:**
 - `GOOGLE_CHAT_WEBHOOK`: The Webhook URL for your Google Chat space.
+- `GCBDR_MONITOR_SKIP_SSL_VERIFY`: (Optional) Set to `true` to disable SSL certificate verification (useful for internal proxies with custom CAs).
 
 **Email:**
 - `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).

@@ -7,12 +7,17 @@ import json
 class TestNotifier(unittest.TestCase):
     def test_google_chat_notifier(self):
         with patch('urllib.request.urlopen') as mock_urlopen, \
-             patch('urllib.request.Request') as mock_request:
+             patch('urllib.request.Request') as mock_request, \
+             patch('ssl.create_default_context') as mock_ssl_context:
             
             # Setup mock response
             mock_response = MagicMock()
             mock_response.status = 200
             mock_urlopen.return_value.__enter__.return_value = mock_response
+            
+            # Setup mock context
+            mock_ctx = MagicMock()
+            mock_ssl_context.return_value = mock_ctx
             
             notifier = GoogleChatNotifier('http://webhook')
             anomalies = [{
@@ -32,6 +37,12 @@ class TestNotifier(unittest.TestCase):
             mock_request.assert_called_once()
             args, kwargs = mock_request.call_args
             self.assertEqual(args[0], 'http://webhook')
+            
+            # Verify context passed
+            mock_ssl_context.assert_called_once()
+            mock_urlopen.assert_called_once()
+            call_args = mock_urlopen.call_args
+            self.assertEqual(call_args[1]['context'], mock_ctx)
             
             # Verify data
             # data is bytes, so we need to decode or parse
