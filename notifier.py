@@ -211,6 +211,11 @@ class NotificationManager:
                 smtp_host, smtp_port, smtp_user, smtp_password, email_sender, email_recipients
             ))
 
+        # Initialize Pub/Sub
+        pubsub_topic = os.environ.get('PUBSUB_TOPIC')
+        if pubsub_topic:
+            self.notifiers.append(PubSubNotifier(pubsub_topic))
+
     def send_notifications(self, anomalies):
         if not anomalies:
             return
@@ -220,3 +225,23 @@ class NotificationManager:
                 notifier.send(anomalies)
             except Exception as e:
                 logger.error(f"Notifier failed: {e}")
+
+class PubSubNotifier(NotifierBase):
+    def __init__(self, topic_name):
+        self.topic_name = topic_name
+        # Lazy import to avoid hard dependency if not used
+        from google.cloud import pubsub_v1
+        self.publisher = pubsub_v1.PublisherClient()
+
+    def send(self, anomalies):
+        if not anomalies:
+            return
+
+        message_data = json.dumps(anomalies).encode('utf-8')
+        
+        try:
+            future = self.publisher.publish(self.topic_name, message_data)
+            message_id = future.result()
+            logger.info(f"Published anomalies to Pub/Sub topic {self.topic_name}. Message ID: {message_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish to Pub/Sub: {e}")

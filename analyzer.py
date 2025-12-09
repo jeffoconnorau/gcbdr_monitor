@@ -854,15 +854,45 @@ def fetch_cloudsql_details(project_id, resource_name):
     if match:
         target_project = match.group(1)
         instance_name = match.group(2)
-    
+    else:
+        # Fallback: assume resource_name is just the instance name if it contains no slashes
+        if '/' not in resource_name:
+             instance_name = resource_name
+        else:
+             # Try to handle //cloudsql.googleapis.com/ prefix or just project/instance
+             parts = resource_name.split('/')
+             if 'instances' in parts:
+                 try:
+                     idx = parts.index('instances')
+                     if idx + 1 < len(parts):
+                         instance_name = parts[idx+1]
+                     if idx - 1 >= 0 and parts[idx-1] != 'zones' and parts[idx-1] != 'projects':
+                         # Sometimes project is not immediately before, scanning...
+                         pass
+                     # Try to find project
+                     if 'projects' in parts:
+                         p_idx = parts.index('projects')
+                         if p_idx + 1 < len(parts):
+                             target_project = parts[p_idx+1]
+                 except ValueError:
+                     pass
+
+    logger.info(f"Fetching CloudSQL details for: Project={target_project}, Instance={instance_name}")
+
     try:
-        service = discovery.build('sqladmin', 'v1beta4', cache_discovery=False)
+        service = discovery.build('sqladmin', 'v1', cache_discovery=False)
         request = service.instances().get(project=target_project, instance=instance_name)
         response = request.execute()
         
-        # dataDiskSizeGb is in settings
-        if 'settings' in response and 'dataDiskSizeGb' in response['settings']:
-            return int(response['settings']['dataDiskSizeGb'])
+        # Check settings for dataDiskSizeGb
+        if 'settings' in response:
+            settings = response['settings']
+            if 'dataDiskSizeGb' in settings:
+                return int(settings['dataDiskSizeGb'])
+            else:
+                logger.warning(f"CloudSQL 'dataDiskSizeGb' missing from settings for {instance_name}. Available keys: {list(settings.keys())}")
+        else:
+            logger.warning(f"CloudSQL 'settings' missing for {instance_name}. Response keys: {list(response.keys())}")
         
         return 0
     except Exception as e:

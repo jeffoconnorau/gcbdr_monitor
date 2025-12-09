@@ -12,6 +12,7 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     - Total Resource Size (GiB)
     - Backup Job Count
 - **Anomaly Detection**: Compares current job statistics against historical averages to identify outliers.
+- **Notifications**: Alerts via Google Chat, Email, and Pub/Sub.
 - **Cloud Run Ready**: Designed to be deployed as a Cloud Run service.
 - **API Endpoint**: Exposes a simple HTTP endpoint to trigger analysis.
 
@@ -129,6 +130,10 @@ Set the following environment variables to enable notifications:
 - `SMTP_PASSWORD`: SMTP Password (or App Password).
 - `EMAIL_SENDER`: Email address to send from.
 - `EMAIL_RECIPIENTS`: Comma-separated list of recipient emails.
+
+**Pub/Sub:**
+- `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
+  - The Cloud Run service account must have `roles/pubsub.publisher` on this topic.
 
 You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
 

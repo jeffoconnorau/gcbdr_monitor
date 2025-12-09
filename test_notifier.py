@@ -1,5 +1,13 @@
+import sys
+from unittest.mock import MagicMock
+# Mock google packages globally before any import
+sys.modules['google'] = MagicMock()
+sys.modules['google.cloud'] = MagicMock()
+sys.modules['google.cloud.pubsub_v1'] = MagicMock()
+sys.modules['google.cloud'].pubsub_v1 = sys.modules['google.cloud.pubsub_v1']
+
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from notifier import GoogleChatNotifier, EmailNotifier, NotificationManager
 from notifier import GoogleChatNotifier, EmailNotifier, NotificationManager
 import os
@@ -114,3 +122,25 @@ class TestNotifier(unittest.TestCase):
                     found_hint = True
                     break
             self.assertTrue(found_hint, "App Password hint not logged")
+
+    def test_pubsub_notifier(self):
+        from notifier import PubSubNotifier
+        
+        # Configure mock
+        mock_pubsub = sys.modules['google.cloud.pubsub_v1']
+        mock_publisher_instance = MagicMock()
+        mock_pubsub.PublisherClient.return_value = mock_publisher_instance
+        mock_publisher_instance.publish.return_value.result.return_value = "msg-id-123"
+        
+        notifier = PubSubNotifier("projects/my-project/topics/my-topic")
+        anomalies = [{'job_id': 'job-1'}]
+        notifier.send(anomalies)
+        
+        expected_data = json.dumps(anomalies).encode('utf-8')
+        mock_publisher_instance.publish.assert_called_once_with("projects/my-project/topics/my-topic", expected_data)
+
+    def test_manager_pubsub_init(self):
+        from notifier import PubSubNotifier
+        with patch.dict(os.environ, {'PUBSUB_TOPIC': 'projects/p/topics/t'}, clear=True):
+            nm = NotificationManager()
+            self.assertTrue(any(isinstance(n, PubSubNotifier) for n in nm.notifiers))
