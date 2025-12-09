@@ -188,7 +188,7 @@ You can also suppress notifications for a specific run by adding `&notify=false`
   gcloud run deploy gcbdr-monitor \
       --image gcr.io/$GOOGLE_CLOUD_PROJECT/gcbdr-monitor \
       --platform managed \
-      --region us-central1 \
+      --region asia-southeast1 \
       --allow-unauthenticated \
       --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT
   ```
@@ -198,7 +198,7 @@ You can also suppress notifications for a specific run by adding `&notify=false`
   ```bash
   gcloud run services update gcbdr-monitor \
       --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CHAT_WEBHOOK='https://chat.googleapis.com/v1/spaces/ABCDE_a1FG/messages?key=examplekey-extended&token=exampletoken-extended' \
-      --region us-central1
+      --region asia-southeast1
   ```
   *(Add other variables like `SMTP_HOST`, `SMTP_PASSWORD` etc. to this command using comma separation).*
 
@@ -266,17 +266,25 @@ The analysis returns a JSON object with the following structure:
 
 ## Deploying to Cloud Run
 
-1.  **Build the Container:**
+1.  **Setup Artifact Registry & Region:**
+    - We will use `asia-southeast1` (Singapore) for this deployment.
+    - Ensure you have an Artifact Registry repository or use the default GCR if enabled.
+    - *Tip:* You can configure your default region globally:
+      ```bash
+      gcloud config set run/region asia-southeast1
+      ```
+
+2.  **Build the Container:**
     ```bash
     gcloud builds submit --tag gcr.io/your-project-id/gcbdr-monitor
     ```
 
-2.  **Deploy:**
+3.  **Deploy:**
     ```bash
     gcloud run deploy gcbdr-monitor \
       --image gcr.io/your-project-id/gcbdr-monitor \
       --platform managed \
-      --region us-central1 \
+      --region asia-southeast1 \
       --allow-unauthenticated
     ```
 
