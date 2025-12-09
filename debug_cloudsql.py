@@ -59,15 +59,32 @@ def debug_cloudsql(project_id, resource_name):
         logger.error("Please ensure the service account has 'Cloud SQL Viewer' (roles/cloudsql.viewer) permission.")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 debug_cloudsql.py <resource_name> [project_id]")
+    try:
+        import argparse
+    except ImportError:
+        print("Error: argparse module missing (this should be standard in Python 3).")
         sys.exit(1)
-        
-    res_name = sys.argv[1]
-    proj_id = sys.argv[2] if len(sys.argv) > 2 else os.environ.get('GOOGLE_CLOUD_PROJECT')
+
+    parser = argparse.ArgumentParser(description="Debug Cloud SQL instance details.")
+    parser.add_argument("resource_name", help="Name of the Cloud SQL instance (or full resource path).")
+    parser.add_argument("--project", "-p", help="Project ID where the Cloud SQL instance resides. Defaults to GOOGLE_CLOUD_PROJECT env var.")
     
-    if not proj_id:
-        print("Error: GOOGLE_CLOUD_PROJECT env var not set and project_id not provided.")
+    args = parser.parse_args()
+    
+    # Check for googleapiclient
+    try:
+        from googleapiclient import discovery
+    except ImportError:
+        print("Error: 'googleapiclient' module not found.")
+        print("Please run: pip install google-api-python-client")
         sys.exit(1)
-        
-    debug_cloudsql(proj_id, res_name)
+
+    target_project = args.project or os.environ.get('GOOGLE_CLOUD_PROJECT')
+    
+    if not target_project:
+        # If resource_name has project, we might be fine, but warn if not.
+        if '/' not in args.resource_name:
+             print("Error: Project ID must be specified via --project or GOOGLE_CLOUD_PROJECT env var.")
+             sys.exit(1)
+             
+    debug_cloudsql(target_project, args.resource_name)
