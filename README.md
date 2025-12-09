@@ -151,7 +151,7 @@ You can also suppress notifications for a specific run by adding `&notify=false`
 
 **Permission Errors (CLI/Cloud Build):**
 - **Symptom:** `Error 403: ... permission denied` during build or push.
-- **Fix:** Gran the following roles to your **Compute Engine Default Service Account** (which Cloud Build often uses by default) or your specific Cloud Build service account.
+- **Fix:** Grant the following roles to your **Compute Engine Default Service Account** (which Cloud Build often uses by default) or your specific Cloud Build service account.
   
   Replace `[PROJECT_NUMBER]` with your Google Cloud Project Number.
   ```bash
@@ -197,10 +197,10 @@ You can also suppress notifications for a specific run by adding `&notify=false`
 - **Fix:** You must explicitly set this variable (and others) during deployment.
   ```bash
   gcloud run services update gcbdr-monitor \
-      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT \
+      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CHAT_WEBHOOK='https://chat.googleapis.com/v1/spaces/ABCDE_a1FG/messages?key=examplekey-extended&token=exampletoken-extended' \
       --region us-central1
   ```
-  *(Add other variables like `GOOGLE_CHAT_WEBHOOK`, `SMTP_HOST`, etc. to this command using comma separation usually, or repeated flags).*
+  *(Add other variables like `SMTP_HOST`, `SMTP_PASSWORD` etc. to this command using comma separation).*
 
 ### Output Structure
 
