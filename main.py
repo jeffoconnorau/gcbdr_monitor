@@ -69,6 +69,17 @@ def format_html(results):
     all_stats = vault_stats + appliance_stats
     anomalies = results.get('anomalies', [])
     
+    
+    # Check for 0GB vault resources warning
+    zero_size_vault_count = sum(1 for r in vault_stats if r.get('total_resource_size_gb', 0) == 0)
+    total_vault_count = len(vault_stats)
+    
+    show_permission_warning = False
+    if total_vault_count > 0:
+        zero_size_pct = zero_size_vault_count / total_vault_count
+        if zero_size_pct > 0.8:
+            show_permission_warning = True
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -78,6 +89,7 @@ def format_html(results):
             body {{ font-family: Arial, sans-serif; margin: 20px; }}
             h1 {{ color: #333; }}
             .summary {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+            .warning {{ background-color: #fff3cd; color: #856404; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px; }}
             table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
             th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
             th {{ background-color: #4CAF50; color: white; }}
@@ -88,7 +100,18 @@ def format_html(results):
     </head>
     <body>
         <h1>GCBDR Monitor Report</h1>
+    """
+
+    if show_permission_warning:
+        html += f"""
+        <div class="warning">
+            <strong>⚠️ Potential Permission Issue Detected</strong><br>
+            {zero_size_vault_count} out of {total_vault_count} ({zero_size_pct*100:.1f}%) Vault resources are showing 0GB size.<br>
+            Please check that the Cloud Run service account has been granted sufficient rights (e.g. <code>Compute Viewer</code> or <code>Cloud SQL Viewer</code>) to the source project(s) to allow size lookup.
+        </div>
+        """
         
+    html += f"""
         <div class="summary">
             <h2>Summary</h2>
             <p><strong>Total Jobs:</strong> {summary.get('total_jobs')}</p>
