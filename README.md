@@ -118,13 +118,13 @@ The analysis returns a JSON object with the following structure:
 ```json
 {
   "summary": {
-    "total_jobs": 100,
-    "successful_jobs": 98,
-    "failed_jobs": 2,
-    "anomalies_count": 0,
-    "total_resource_size_gb": 5000.00,
-    "current_daily_change_gb": 50.0000,
-    "current_daily_change_pct": 1.00
+    "anomalies_count": 6,
+    "current_daily_change_gb": 179.5601,
+    "current_daily_change_pct": 7.17,
+    "failed_jobs": 3,
+    "successful_jobs": 491,
+    "total_jobs": 494,
+    "total_resource_size_gb": 2505.24
   },
   "vault_workloads": {
     "total_jobs": 50,
@@ -140,30 +140,34 @@ The analysis returns a JSON object with the following structure:
   },
   "anomalies": [
     {
+      "avg_bytes": 590558002.75,
+      "avg_duration_seconds": 0.0,
+      "avg_gib": 0.55,
+      "bytes": 0,
+      "date": "2025-12-08",
+      "duration_seconds": 0,
+      "gib_transferred": 0.0,
+      "job_id": "Job_19743280",
+      "reasons": "Size Drop-off (0.0% of avg)",
+      "resource": "FERHATDB",
+      "resource_type": "Oracle",
+      "time": "06:09:24 UTC",
+      "total_resource_size_gb": 164.71
+    },
+    {
       "avg_bytes": 1836098519.0,
+      "avg_duration_seconds": 0.0,
       "avg_gib": 1.71,
       "bytes": 7097433456,
       "date": "2025-12-08",
-      "factor": 3.87,
+      "duration_seconds": 0,
       "gib_transferred": 6.61,
       "job_id": "Job_19729093",
+      "reasons": "Size Spike (Factor=3.9x)",
       "resource": "winsql22-01",
       "resource_type": "VMBackup",
       "time": "06:39:24 UTC",
       "total_resource_size_gb": 62.12
-    },
-    {
-      "avg_bytes": 3579139.3333333335,
-      "avg_gib": 0.0033,
-      "bytes": 21474836,
-      "date": "2025-12-08",
-      "factor": 6.0,
-      "gib_transferred": 0.02,
-      "job_id": "Job_19704041",
-      "resource": "WINSQL22-02",
-      "resource_type": "SqlInstance",
-      "time": "02:53:15 UTC",
-      "total_resource_size_gb": 200.0
     }
   ]
 }
