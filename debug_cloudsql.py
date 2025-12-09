@@ -2,13 +2,19 @@
 import os
 import sys
 import logging
-from googleapiclient import discovery
 import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def debug_cloudsql(project_id, resource_name):
+    # Lazy import to handle missing dependency gracefully
+    try:
+        from googleapiclient import discovery
+    except ImportError:
+        logger.error("'googleapiclient' module not found. Please install it via: pip install google-api-python-client")
+        sys.exit(1)
+
     logger.info(f"Debugging Cloud SQL for Project: {project_id}, Resource: {resource_name}")
     
     target_project = project_id
