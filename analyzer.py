@@ -608,8 +608,12 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all')
         # Fallback to GCE API if size is still 0 and it looks like a GCE resource
         # resource_type in logs is often 'Compute Engine' or 'Disk'
         if total_resource_size_gb == 0:
+            resource_type_lower = resource_type.lower()
             try:
-                if resource_type in ('GCE_INSTANCE', 'Compute Engine'):
+                # GCE Instances
+                if 'gce' in resource_type_lower or 'compute' in resource_type_lower or 'vm' in resource_type_lower:
+                    # Note: 'vm' might be broad but GCBDR usually labels on-prem as generic 'VM' or 'VMware'
+                    # We'll try GCE lookup. If it fails (not found), it just returns 0.
                     gce_size = 0
                     if res in gce_cache:
                         gce_size = gce_cache[res]
@@ -619,14 +623,20 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all')
                     
                     if gce_size > 0:
                         total_resource_size_gb = gce_size
-                elif resource_type in ('Disk', 'Persistent Disk'):
-                    disk_size = fetch_gce_disk_details(project_id, res)
-                    if disk_size > 0:
-                        total_resource_size_gb = disk_size
-                elif resource_type in ('Cloud SQL', 'CloudSQL', 'sql-instance', 'SqlInstance'):
+                        
+                # Persistent Disks
+                elif 'disk' in resource_type_lower:
+                     disk_size = fetch_gce_disk_details(project_id, res)
+                     if disk_size > 0:
+                         total_resource_size_gb = disk_size
+
+                # Cloud SQL
+                elif 'sql' in resource_type_lower:
                     sql_size = fetch_cloudsql_details(project_id, res)
                     if sql_size > 0:
                         total_resource_size_gb = sql_size
+            except Exception as e:
+                logger.warning(f"Failed to fetch details for {res} ({resource_type}): {e}")
             except Exception as e:
                 logger.warning(f"Failed to fetch details for {res} ({resource_type}): {e}")
 
