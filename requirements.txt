@@ -1,6 +1,6 @@
-google-cloud-logging==3.11.0
-flask==3.0.3
-gunicorn==22.0.0
-pytest==8.2.0
-google-cloud-compute==1.15.0
+google-cloud-logging
+flask
+gunicorn
+pytest
+google-cloud-compute
 google-api-python-client==2.129.0

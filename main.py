@@ -162,6 +162,8 @@ def format_html(results):
     """
     return html
 
+from notifier import NotificationManager
+
 @app.route("/", methods=["POST", "GET"])
 def index():
     """
@@ -176,6 +178,12 @@ def index():
         source_type = request.args.get('source_type', 'all')
         output_format = request.args.get('format', 'json').lower()
         
+        # Check if notifications should be forced or disabled
+        # Default behavior: Notify if configured and anomalies found
+        # ?notify=false to disable
+        notify_param = request.args.get('notify', 'true').lower()
+        should_notify = notify_param == 'true'
+        
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
         
         if not project_id:
@@ -186,6 +194,13 @@ def index():
         logger.info(f"Starting GCBDR analysis for project {project_id} with {days} days history")
         
         results = analyze_backup_jobs(project_id, days, filter_name=filter_name, source_type=source_type)
+        
+        # Send notifications if anomalies detected
+        anomalies = results.get('anomalies', [])
+        if anomalies and should_notify:
+            logger.info(f"Sending notifications for {len(anomalies)} anomalies...")
+            nm = NotificationManager()
+            nm.send_notifications(anomalies)
         
         if output_format == 'csv':
             return format_csv(results), 200, {'Content-Type': 'text/csv'}

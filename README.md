@@ -111,6 +111,26 @@ Example Anomaly Output (JSON):
 }
 ```
 
+### Notifications
+
+The tool can alert you via Google Chat or Email when anomalies are detected.
+
+#### Configuration
+Set the following environment variables to enable notifications:
+
+**Google Chat:**
+- `GOOGLE_CHAT_WEBHOOK`: The Webhook URL for your Google Chat space.
+
+**Email:**
+- `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
+- `SMTP_PORT`: Port (default: 587).
+- `SMTP_USER`: SMTP Username/Email.
+- `SMTP_PASSWORD`: SMTP Password (or App Password).
+- `EMAIL_SENDER`: Email address to send from.
+- `EMAIL_RECIPIENTS`: Comma-separated list of recipient emails.
+
+You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
+
 ### Output Structure
 
 The analysis returns a JSON object with the following structure:
