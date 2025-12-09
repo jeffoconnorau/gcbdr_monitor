@@ -180,6 +180,20 @@ You can also suppress notifications for a specific run by adding `&notify=false`
       --role=roles/logging.viewer
   ```
 
+- **Symptom:** `Total Resource Size` is 0GB in Cloud Run (but works locally).
+- **Fix:** The service account needs permission to query Compute Engine and Cloud SQL APIs to look up resource sizes.
+  ```bash
+  # Grant Compute Viewer (for VMs and Disks)
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/compute.viewer
+
+  # Grant Cloud SQL Viewer (for SQL Instances)
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
+      --role=roles/cloudsql.viewer
+  ```
+
 **Cloud Run Deployment Errors:**
 - **Symptom:** `Deployment failed ... Retry` or image not found errors.
 - **Cause:** Often due to using a placeholder ID in the image URL (e.g., `gcr.io/your-project-id/...`).
