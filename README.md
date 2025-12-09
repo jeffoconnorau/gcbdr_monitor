@@ -132,6 +132,21 @@ Set the following environment variables to enable notifications:
 
 You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
 
+#### Troubleshooting Notifications
+
+**Email (SMTP) Issues:**
+- **Authentication Failed (535):**
+    - If using Gmail or Outlook with 2FA enabled, you **MUST** use an **App Password**, not your regular login password.
+    - **Special Characters:** If your password contains special characters, ensure they are properly escaped when setting the environment variable in your shell.
+        - *Bad:* `export SMTP_PASSWORD=foo!bar` (bash might interpret `!`)
+        - *Good:* `export SMTP_PASSWORD='foo!bar'` (use single quotes)
+- **Connection Timeout:** Check if your firewall allows outbound traffic on port 587 (or 465/25).
+
+**Google Chat Issues:**
+- **SSL Certificate Verify Failed:**
+    - This often happens behind corporate proxies or firewalls that intercept SSL traffic.
+    - **Fix:** Set `GCBDR_MONITOR_SKIP_SSL_VERIFY=true` to bypass verification (use with caution).
+
 ### Output Structure
 
 The analysis returns a JSON object with the following structure:

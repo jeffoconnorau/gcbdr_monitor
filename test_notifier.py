@@ -1,8 +1,10 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from notifier import GoogleChatNotifier, EmailNotifier, NotificationManager
+from notifier import GoogleChatNotifier, EmailNotifier, NotificationManager
 import os
 import json
+import smtplib
 
 class TestNotifier(unittest.TestCase):
     def test_google_chat_notifier(self):
@@ -79,3 +81,36 @@ class TestNotifier(unittest.TestCase):
             nm = NotificationManager()
             self.assertEqual(len(nm.notifiers), 1)
             self.assertIsInstance(nm.notifiers[0], GoogleChatNotifier)
+
+    def test_email_notifier_auth_error(self):
+        with patch('smtplib.SMTP') as mock_smtp, \
+             patch('notifier.logger') as mock_logger:
+            
+            # Setup mock to raise SMTPAuthenticationError
+            mock_smtp.return_value.__enter__.return_value.login.side_effect = smtplib.SMTPAuthenticationError(535, b'Authentication failed')
+            
+            notifier = EmailNotifier('smtp.host', 587, 'user', 'pass', 'sender@example.com', 'recipient@example.com')
+            anomalies = [{
+                'resource': 'vm-1', 
+                'reasons': 'Size Spike',
+                'gib_transferred': 10,
+                'avg_gib': 1,
+                'duration_seconds': 100,
+                'avg_duration_seconds': 10,
+                'date': '2023-01-01',
+                'time': '10:00:00'
+            }]
+            
+            notifier.send(anomalies)
+            
+            # Verify explicit error logging
+            args, _ = mock_logger.error.call_args_list[0]
+            self.assertIn("SMTP Authentication Failed", args[0])
+            
+            # Verify hints are logged
+            found_hint = False
+            for call in mock_logger.error.call_args_list:
+                if "HINT: If using Gmail/Outlook" in call[0][0]:
+                    found_hint = True
+                    break
+            self.assertTrue(found_hint, "App Password hint not logged")

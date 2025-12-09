@@ -150,6 +150,10 @@ class EmailNotifier(NotifierBase):
                 server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)
             logger.info(f"Sent email alert to {len(self.recipients)} recipients")
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP Authentication Failed: {e}")
+            logger.error("HINT: If using Gmail/Outlook, ensure you are using an App Password, not your login password.")
+            logger.error("HINT: If your password has special characters, ensure they are properly escaped in the environment variable (e.g., use single quotes in shell).")
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
 
