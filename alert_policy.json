@@ -23,5 +23,6 @@
     }
   },
   "combiner": "OR",
-  "enabled": true
+  "enabled": true,
+  "severity": "WARNING"
 }
