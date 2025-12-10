@@ -267,4 +267,10 @@ class LogNotifier(NotifierBase):
         # We use print() here to bypass the Python logging formatter (which adds timestamps/levels).
         # On Cloud Run, printing a pure JSON line to stdout is automatically captured as a
         # structured log entry with jsonPayload.
-        print(json.dumps(log_entry), flush=True)
+        # Use default=str to handle any non-serializable objects (like datetime) just in case.
+        try:
+            print(json.dumps(log_entry, default=str), flush=True)
+        except Exception as e:
+            logger.error(f"Failed to serialize structured log: {e}")
+            # Fallback to plain text log so we at least see something
+            logger.warning(f"GCBDR_ANOMALY_DETECTED (Fallback): Found {len(anomalies)} anomalies. Check logs for serialization errors.")
