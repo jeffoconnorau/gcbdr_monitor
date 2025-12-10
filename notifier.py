@@ -258,6 +258,7 @@ class LogNotifier(NotifierBase):
 
         # Structured log entry for Cloud Monitoring
         log_entry = {
+            "severity": "WARNING",
             "event": "GCBDR_ANOMALY_DETECTED",
             "anomalies_count": len(anomalies),
             "anomalies": anomalies
