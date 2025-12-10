@@ -233,13 +233,14 @@ severity>=WARNING
 ```
 
 **To create an alert policy via gcloud:**
+1.  Verify the `alert_policy.json` file in the repository.
+2.  Run the following command (replace `YOUR_CHANNEL_ID` with your actual Notification Channel ID, e.g., `projects/YOUR_PROJECT/notificationChannels/12345`).
+    *   *Tip: List channels with `gcloud beta monitoring channels list`*
+
 ```bash
 gcloud alpha monitoring policies create \
-  --display-name="GCBDR Backup Anomaly" \
-  --condition-display-name="Anomaly Detected" \
-  --condition-filter='resource.type="cloud_run_revision" AND jsonPayload.event="GCBDR_ANOMALY_DETECTED"' \
-  --notification-channels="YOUR_CHANNEL_ID" \
-  --combiner=OR
+  --policy-from-file=alert_policy.json \
+  --notification-channels="YOUR_CHANNEL_ID"
 ```
 
 ### Output Structure
