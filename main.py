@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from analyzer import analyze_backup_jobs
 
 app = Flask(__name__)
+VERSION = "1.0.0"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -214,7 +215,7 @@ def index():
             # In Cloud Run, this is usually set automatically or we can pass it
             return "GOOGLE_CLOUD_PROJECT environment variable not set", 500
 
-        logger.info(f"Starting GCBDR analysis for project {project_id} with {days} days history")
+        logger.info(f"Starting GCBDR analysis v{VERSION} for project {project_id} with {days} days history")
         
         results = analyze_backup_jobs(project_id, days, filter_name=filter_name, source_type=source_type)
         
