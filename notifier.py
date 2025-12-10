@@ -263,9 +263,7 @@ class LogNotifier(NotifierBase):
             "anomalies": anomalies
         }
         
-        # Log as warning so it picks up severity=WARNING in Cloud Logging
-        # We dump string to ensure it's captured in jsonPayload if structured logging is enabled,
-        # or at least greppable in textPayload.
-        # Ideally, use structlog or google-cloud-logging library for pure JSON struct logging,
-        # but standard logging with json dumps is often sufficient for simple filters.
-        logger.warning(json.dumps(log_entry))
+        # We use print() here to bypass the Python logging formatter (which adds timestamps/levels).
+        # On Cloud Run, printing a pure JSON line to stdout is automatically captured as a
+        # structured log entry with jsonPayload.
+        print(json.dumps(log_entry), flush=True)
