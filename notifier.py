@@ -211,6 +211,8 @@ class NotificationManager:
                 smtp_host, smtp_port, smtp_user, smtp_password, email_sender, email_recipients
             ))
 
+        # Initialize Pub/Sub
+        pubsub_topic = os.environ.get('PUBSUB_TOPIC')
         if pubsub_topic:
             self.notifiers.append(PubSubNotifier(pubsub_topic))
 
