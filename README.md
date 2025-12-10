@@ -215,12 +215,32 @@ You can also suppress notifications for a specific run by adding `&notify=false`
 
 - **Symptom:** `GOOGLE_CLOUD_PROJECT environment variable not set`
 - **Fix:** You must explicitly set this variable (and others) during deployment.
-  ```bash
+```
   gcloud run services update gcbdr-monitor \
       --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CHAT_WEBHOOK='https://chat.googleapis.com/v1/spaces/ABCDE_a1FG/messages?key=examplekey-extended&token=exampletoken-extended' \
       --region asia-southeast1
   ```
   *(Add other variables like `SMTP_HOST`, `SMTP_PASSWORD` etc. to this command using comma separation).*
+
+### Alerting (Cloud Monitoring)
+
+The application automatically logs structured JSON events when anomalies are detected. You can set up a **Log-based Alert Policy** in Google Cloud Monitoring to get notified via Email, SMS, Slack, PagerDuty, etc.
+
+**Log Filter:**
+```
+jsonPayload.event="GCBDR_ANOMALY_DETECTED"
+severity>=WARNING
+```
+
+**To create an alert policy via gcloud:**
+```bash
+gcloud alpha monitoring policies create \
+  --display-name="GCBDR Backup Anomaly" \
+  --condition-display-name="Anomaly Detected" \
+  --condition-filter='resource.type="cloud_run_revision" AND jsonPayload.event="GCBDR_ANOMALY_DETECTED"' \
+  --notification-channels="YOUR_CHANNEL_ID" \
+  --combiner=OR
+```
 
 ### Output Structure
 

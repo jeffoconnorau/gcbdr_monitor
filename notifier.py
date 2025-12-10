@@ -211,10 +211,13 @@ class NotificationManager:
                 smtp_host, smtp_port, smtp_user, smtp_password, email_sender, email_recipients
             ))
 
-        # Initialize Pub/Sub
-        pubsub_topic = os.environ.get('PUBSUB_TOPIC')
         if pubsub_topic:
             self.notifiers.append(PubSubNotifier(pubsub_topic))
+
+        # Initialize LogNotifier (Always enabled for Cloud Monitoring)
+        # You can disable this by setting ENABLE_LOG_ALERT=false
+        if os.environ.get('ENABLE_LOG_ALERT', 'true').lower() == 'true':
+            self.notifiers.append(LogNotifier())
 
     def send_notifications(self, anomalies):
         if not anomalies:
@@ -245,3 +248,22 @@ class PubSubNotifier(NotifierBase):
             logger.info(f"Published anomalies to Pub/Sub topic {self.topic_name}. Message ID: {message_id}")
         except Exception as e:
             logger.error(f"Failed to publish to Pub/Sub: {e}")
+
+class LogNotifier(NotifierBase):
+    def send(self, anomalies):
+        if not anomalies:
+            return
+
+        # Structured log entry for Cloud Monitoring
+        log_entry = {
+            "event": "GCBDR_ANOMALY_DETECTED",
+            "anomalies_count": len(anomalies),
+            "anomalies": anomalies
+        }
+        
+        # Log as warning so it picks up severity=WARNING in Cloud Logging
+        # We dump string to ensure it's captured in jsonPayload if structured logging is enabled,
+        # or at least greppable in textPayload.
+        # Ideally, use structlog or google-cloud-logging library for pure JSON struct logging,
+        # but standard logging with json dumps is often sufficient for simple filters.
+        logger.warning(json.dumps(log_entry))
