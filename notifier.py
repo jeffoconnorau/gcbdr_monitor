@@ -6,6 +6,7 @@ import ssl
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from google.cloud import logging as cloud_logging
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,8 @@ class EmailNotifier(NotifierBase):
         """
 
 class NotificationManager:
-    def __init__(self):
+    def __init__(self, project_id=None):
+        self.project_id = project_id
         self.notifiers = []
         
         # Initialize Google Chat
@@ -219,7 +221,7 @@ class NotificationManager:
         # Initialize LogNotifier (Always enabled for Cloud Monitoring)
         # You can disable this by setting ENABLE_LOG_ALERT=false
         if os.environ.get('ENABLE_LOG_ALERT', 'true').lower() == 'true':
-            self.notifiers.append(LogNotifier())
+            self.notifiers.append(LogNotifier(project_id))
 
     def send_notifications(self, anomalies):
         if not anomalies:
@@ -252,6 +254,9 @@ class PubSubNotifier(NotifierBase):
             logger.error(f"Failed to publish to Pub/Sub: {e}")
 
 class LogNotifier(NotifierBase):
+    def __init__(self, project_id=None):
+        self.project_id = project_id
+
     def send(self, anomalies):
         if not anomalies:
             return
@@ -264,13 +269,27 @@ class LogNotifier(NotifierBase):
             "anomalies": anomalies
         }
         
-        # We use print() here to bypass the Python logging formatter (which adds timestamps/levels).
-        # On Cloud Run, printing a pure JSON line to stdout is automatically captured as a
-        # structured log entry with jsonPayload.
-        # Use default=str to handle any non-serializable objects (like datetime) just in case.
+        # Method 1: Explicitly write to Cloud Logging API (Works locally and in Cloud Run)
         try:
-            print(json.dumps(log_entry, default=str), flush=True)
+            # Use provided project_id or auto-discover
+            client = cloud_logging.Client(project=self.project_id)
+            # Use a specific log name to ensure isolation and easy filtering
+            logger_client = client.logger("gcbdr_monitor_alerts")
+            
+            # log_struct sends the JSON payload with correctly set severity
+            logger_client.log_struct(
+                log_entry, 
+                severity='WARNING'
+            )
+            logger.info(f"Successfully wrote structured log to 'gcbdr_monitor_alerts' for {len(anomalies)} anomalies.")
+            
         except Exception as e:
-            logger.error(f"Failed to serialize structured log: {e}")
-            # Fallback to plain text log so we at least see something
-            logger.warning(f"GCBDR_ANOMALY_DETECTED (Fallback): Found {len(anomalies)} anomalies. Check logs for serialization errors.")
+            logger.error(f"Failed to write to Cloud Logging API: {e}")
+            logger.info("Falling back to stdout printing...")
+            
+            # Method 2: Fallback to stdout (Reliable in Cloud Run, but maybe not local)
+            try:
+                print(json.dumps(log_entry, default=str), flush=True)
+            except Exception as e2:
+                logger.error(f"Failed to serialize structured log (fallback): {e2}")
+                logger.warning(f"GCBDR_ANOMALY_DETECTED (Fallback): Found {len(anomalies)} anomalies. Check logs for serialization errors.")

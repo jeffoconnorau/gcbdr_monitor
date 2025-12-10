@@ -8,7 +8,7 @@
     {
       "displayName": "Anomaly Detected",
       "conditionMatchedLog": {
-        "filter": "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"GCBDR_ANOMALY_DETECTED\""
+        "filter": "jsonPayload.event=\"GCBDR_ANOMALY_DETECTED\""
       }
     }
   ],

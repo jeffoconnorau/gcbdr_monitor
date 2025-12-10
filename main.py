@@ -223,7 +223,7 @@ def index():
         anomalies = results.get('anomalies', [])
         if anomalies and should_notify:
             logger.info(f"Sending notifications for {len(anomalies)} anomalies...")
-            nm = NotificationManager()
+            nm = NotificationManager(project_id)
             nm.send_notifications(anomalies)
         
         if output_format == 'csv':
