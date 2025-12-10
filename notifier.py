@@ -261,12 +261,29 @@ class LogNotifier(NotifierBase):
         if not anomalies:
             return
 
+        # Helper to create a short summary string for labels
+        # e.g. "db-1 (Size Spike), vm-2 (Duration)"
+        summary_items = []
+        for a in anomalies[:5]: # Limit to first 5 to keep label size reasonable
+            res = a.get('resource', 'unknown')
+            reasons = a.get('reasons', '').split(',')[0] # Take first reason only
+            if 'Size Spike' in reasons: reasons = 'Size Spike'
+            elif 'Size Drop' in reasons: reasons = 'Size Drop'
+            elif 'Duration' in reasons: reasons = 'Duration'
+            summary_items.append(f"{res} ({reasons})")
+        
+        if len(anomalies) > 5:
+            summary_items.append(f"... +{len(anomalies)-5} more")
+            
+        summary_text = ", ".join(summary_items)
+
         # Structured log entry for Cloud Monitoring
         log_entry = {
             "severity": "WARNING",
             "event": "GCBDR_ANOMALY_DETECTED",
             "anomalies_count": len(anomalies),
-            "anomalies": anomalies
+            "anomalies": anomalies,
+            "summary_text": summary_text
         }
         
         # Method 1: Explicitly write to Cloud Logging API (Works locally and in Cloud Run)

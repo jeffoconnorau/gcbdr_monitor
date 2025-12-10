@@ -8,7 +8,12 @@
     {
       "displayName": "Anomaly Detected",
       "conditionMatchedLog": {
-        "filter": "jsonPayload.event=\"GCBDR_ANOMALY_DETECTED\""
+        "filter": "jsonPayload.event=\"GCBDR_ANOMALY_DETECTED\"",
+        "labelExtractors": {
+          "anomalies_count": "EXTRACT(jsonPayload.anomalies_count)",
+          "anomalies_event": "EXTRACT(jsonPayload.event)",
+          "anomalies_summary": "EXTRACT(jsonPayload.summary_text)"
+        }
       }
     }
   ],
