@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  observer:
+    build: .
+    container_name: observer
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=my-super-secret-auth-token
+      - INFLUXDB_ORG=my-org
+      - INFLUXDB_BUCKET=gcbdr
+      - INFLUXDB_BUCKET=gcbdr
+      # Mock credentials for local testing
+      - GCBDR_MOCK_MODE=true
+      # Pass-through variables from .env or host
+      - GOOGLE_CLOUD_PROJECT
+      - GOOGLE_APPLICATION_CREDENTIALS
+      - MGMT_CONSOLE_ENDPOINT
+    depends_on:
+      - influxdb
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: gcbdr-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=my-super-secret-auth-token
+      - DOCKER_INFLUXDB_INIT_ORG=my-org
+      - DOCKER_INFLUXDB_INIT_BUCKET=gcbdr
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gcbdr-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - influxdb
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  influxdb-data:
+  grafana-data:

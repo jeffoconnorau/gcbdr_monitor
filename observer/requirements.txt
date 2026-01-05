@@ -1,0 +1,8 @@
+google-cloud-logging>=3.11.0
+google-cloud-backupdr>=0.1.0
+google-auth>=2.29.0
+influxdb-client>=1.45.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+tenacity>=8.5.0
+regex>=2024.0.0
