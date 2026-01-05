@@ -78,6 +78,11 @@ class GCBDRMonitor:
                     logger.error(f"Error exporting metrics: {e}", exc_info=True)
             
             # Sleep
+            if Config.SINGLE_RUN:
+                logger.info("Single run mode enabled. Exiting.")
+                self.running = False
+                break
+
             elapsed = time.time() - start_time
             sleep_time = max(0, Config.POLL_INTERVAL_SECONDS - elapsed)
             time.sleep(sleep_time)

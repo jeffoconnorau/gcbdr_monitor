@@ -7,6 +7,7 @@ class Config:
     # General
     POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
     MOCK_MODE = os.getenv("GCBDR_MOCK_MODE", "false").lower() == "true"
+    SINGLE_RUN = os.getenv("SINGLE_RUN", "false").lower() == "true"
 
     # InfluxDB
     INFLUXDB_URL = os.getenv("INFLUXDB_URL", "http://localhost:8086")
