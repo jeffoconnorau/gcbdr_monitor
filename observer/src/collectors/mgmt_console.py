@@ -49,7 +49,8 @@ class MgmtConsoleCollector(BaseCollector):
 
         metrics = []
         try:
-            url = f"{self.endpoint}/jobstatus"
+            # API Base is typically /actifio/api
+            url = f"{self.endpoint}/actifio/api/jobstatus"
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json"

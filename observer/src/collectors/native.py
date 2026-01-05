@@ -40,6 +40,7 @@ class NativeGCBDRCollector(BaseCollector):
                 f'timestamp >= "{timestamp_str}" AND '
                 f'(resource.type="backupdr.googleapis.com/BackupVault" OR '
                 f' resource.type="backupdr.googleapis.com/ManagementServer" OR '
+                f' logName:"gcb_backup_recovery_jobs" OR '
                 f' protoPayload.serviceName="backupdr.googleapis.com")'
             )
 
