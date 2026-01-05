@@ -1,10 +1,14 @@
 from typing import List
 import requests
 import time
+import urllib3
 import google.auth
 from google.auth.transport.requests import Request
 from .base import BaseCollector, Metric
 from config import Config
+
+# Suppress InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class MgmtConsoleCollector(BaseCollector):
     def __init__(self):
