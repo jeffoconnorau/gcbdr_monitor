@@ -9,7 +9,7 @@ services:
       - INFLUXDB_BUCKET=gcbdr
       - INFLUXDB_BUCKET=gcbdr
       # Mock credentials for local testing
-      - GCBDR_MOCK_MODE=true
+      - GCBDR_MOCK_MODE=false
       # Pass-through variables from .env or host
       - GOOGLE_CLOUD_PROJECT
       - GOOGLE_APPLICATION_CREDENTIALS
