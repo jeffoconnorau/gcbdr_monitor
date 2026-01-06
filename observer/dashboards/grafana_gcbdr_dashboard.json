@@ -502,7 +502,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/(Failed|fail|Fail|ERROR|CRITICAL)/"
+              "options": "(Failed|fail|Fail|ERROR|CRITICAL|FAILED|Failure)"
             },
             "properties": [
               {
@@ -517,13 +517,13 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/(Running|run)/"
+              "options": "(Running|run|RUNNING)"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#EAB839",
                   "mode": "fixed"
                 }
               }
@@ -532,7 +532,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/(Succeeded|succeeded|Successful|success)/"
+              "options": "(Succeeded|succeeded|Successful|success|SUCCESSFUL|Success)"
             },
             "properties": [
               {
@@ -547,7 +547,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/(Not Run|not run|Aborted|Cancelled)/"
+              "options": "(Not Run|not run|Aborted|Cancelled|SKIPPED)"
             },
             "properties": [
               {
@@ -555,6 +555,54 @@
                 "value": {
                   "fixedColor": "orange",
                   "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "_start"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "_stop"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": true
                 }
               }
             ]
