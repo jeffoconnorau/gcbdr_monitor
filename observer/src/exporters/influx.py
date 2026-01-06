@@ -37,10 +37,8 @@ class InfluxExporter:
                 p.field(k, v)
                 
             if m.timestamp:
-                # Assuming timestamp is in seconds, convert to ns if needed or specify precision
-                # InfluxDB client defaults to ns if write_precision not set?
-                # Let's trust the default for now or treat timestamp as datetime
-                pass
+                # Convert float seconds to nanoseconds
+                p.time(int(m.timestamp * 1_000_000_000), WritePrecision.NS)
             
             points.append(p)
 
