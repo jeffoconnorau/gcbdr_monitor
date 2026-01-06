@@ -105,7 +105,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
           "refId": "A"
         }
       ]
@@ -164,7 +164,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\")\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\" or r[\"status\"] == \"ERROR\" or r[\"status\"] == \"CRITICAL\")\n  |> count()",
           "refId": "A"
         }
       ]
@@ -250,7 +250,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> yield(name: \"sum\")",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> yield(name: \"sum\")",
           "refId": "A"
         }
       ]
@@ -310,7 +310,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"type\"])\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"type\"])\n  |> count()",
           "refId": "A"
         }
       ]
@@ -374,7 +374,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()",
           "refId": "A"
         }
       ]
