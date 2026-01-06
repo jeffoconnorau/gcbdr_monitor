@@ -66,6 +66,7 @@ class NativeGCBDRCollector(BaseCollector):
             except Exception:
                 pass
         data['duration'] = duration
+        data['endTime'] = end # Store datetime object or timestamp
         
         # 4. Other Metadata
         data['jobId'] = payload.get('jobId', 'unknown')
@@ -194,7 +195,23 @@ class NativeGCBDRCollector(BaseCollector):
                 if job_id == 'unknown' and status == 'unknown':
                     continue
 
-                ts = entry.timestamp.timestamp() if entry.timestamp else now.timestamp()
+                # Use job endTime if available for best accuracy, else log timestamp
+                if parsed_data.get('endTime'):
+                     try:
+                        # endTime is already parsed in _parse_job_payload but we didn't store the raw object
+                        # Let's re-parse or store it in _parse_job_payload. 
+                        # actually _parse_job_payload doesn't return endTime object, it calculates duration.
+                        # Let's trust entry.timestamp for now as it's usually very close to endTime for native logs
+                        # But wait, looking at line 58 of _parse_job_payload, it gets endTime string.
+                        pass
+                     except:
+                        pass
+
+                # Use job endTime if available for best accuracy, else log timestamp
+                if parsed_data.get('endTime') and isinstance(parsed_data['endTime'], datetime):
+                    ts = parsed_data['endTime'].timestamp()
+                else:
+                    ts = entry.timestamp.timestamp() if entry.timestamp else now.timestamp()
                 
                 metrics.append(Metric(
                     name="gcbdr_log_event",
