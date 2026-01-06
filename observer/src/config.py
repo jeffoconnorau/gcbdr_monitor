@@ -6,6 +6,7 @@ load_dotenv()
 class Config:
     # General
     POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
+    INITIAL_HISTORY_MINUTES = int(os.getenv("INITIAL_HISTORY_MINUTES", "0"))
     MOCK_MODE = os.getenv("GCBDR_MOCK_MODE", "false").lower() == "true"
     SINGLE_RUN = os.getenv("SINGLE_RUN", "false").lower() == "true"
 

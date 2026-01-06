@@ -125,19 +125,33 @@ class NativeGCBDRCollector(BaseCollector):
 
         metrics = []
         try:
-            # Calculate time window (last POLL_INTERVAL_SECONDS + buffer)
+            # Determine time window
             now = datetime.now(timezone.utc)
-            seconds = Config.POLL_INTERVAL_SECONDS + 10
-            time_filter = now - timedelta(seconds=seconds)
+            
+            # If this is the first run and INITIAL_HISTORY_MINUTES is set, use it
+            if not hasattr(self, '_has_run_once'):
+                lookback_minutes = Config.INITIAL_HISTORY_MINUTES
+                if lookback_minutes > 0:
+                    self.logger.info(f"First run: Fetching last {lookback_minutes} minutes of history.")
+                    time_filter = now - timedelta(minutes=lookback_minutes)
+                else:
+                    time_filter = now - timedelta(seconds=Config.POLL_INTERVAL_SECONDS + 10)
+                self._has_run_once = True
+            else:
+                 time_filter = now - timedelta(seconds=Config.POLL_INTERVAL_SECONDS + 10)
+
             timestamp_str = time_filter.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             
             # Construct Filter
             # Combined filter for Native Vault jobs and Appliance events
+            # Added 'bdr_backup_restore_jobs' which was missing
             filter_str = (
                 f'timestamp >= "{timestamp_str}" AND '
                 f'('
                 f' (resource.type="backupdr.googleapis.com/BackupVault") OR '
                 f' (resource.type="backupdr.googleapis.com/ManagementServer") OR '
+                f' (logName:"bdr_backup_recovery_jobs") OR '
+                f' (logName:"bdr_backup_restore_jobs") OR '
                 f' (logName:"gcb_backup_recovery_jobs") OR '
                 f' (logName:"backup_recovery_appliance_events" AND jsonPayload.eventId="44003")'
                 f')'
