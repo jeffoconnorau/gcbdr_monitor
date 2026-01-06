@@ -156,7 +156,7 @@
         "showthresholdMarkers": true
       },
       "pluginVersion": "10.0.0",
-      "title": "Failed Jobs (Last 1h)",
+      "title": "Failed Jobs (Last 24h)",
       "type": "stat",
       "targets": [
         {
@@ -164,7 +164,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\" or r[\"status\"] == \"ERROR\" or r[\"status\"] == \"CRITICAL\")\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\" or r[\"status\"] == \"ERROR\" or r[\"status\"] == \"CRITICAL\")\n  |> count()",
           "refId": "A"
         }
       ]

@@ -9,7 +9,7 @@ services:
       - INFLUXDB_BUCKET=gcbdr
       - INFLUXDB_BUCKET=gcbdr
       - POLL_INTERVAL_SECONDS=60
-      - INITIAL_HISTORY_MINUTES=1440 # Fetch last 24h on startup
+      - INITIAL_HISTORY_MINUTES=129600 # Fetch last 90 days on startup
       # Mock credentials for local testing
       - GCBDR_MOCK_MODE=false
       # Pass-through variables from .env or host
