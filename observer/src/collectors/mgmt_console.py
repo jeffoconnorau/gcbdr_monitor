@@ -42,6 +42,25 @@ class MgmtConsoleCollector(BaseCollector):
             self.logger.error(f"Failed to refresh token: {e}")
             return None
 
+    def _parse_job_time(self, job: dict) -> float:
+        """Parse job completion time from various possible fields."""
+        try:
+            # Fields in order of preference
+            time_fields = ['ended', 'completed', 'updated', 'created']
+            for field in time_fields:
+                val = job.get(field)
+                if val:
+                    # Actifio API typically returns milliseconds or ISO string
+                    # If int/float, assume milliseconds (common in Java APIs) or seconds
+                    if isinstance(val, (int, float)):
+                         # Heuristic: if > 3e9 (year 2065), it's probably millis; else seconds
+                         # Current time in millis is ~1.7e12
+                        return float(val) / 1000.0 if val > 1_000_000_000_000 else float(val)
+                    # TODO: Add string parsing if needed (e.g. ISO 8601)
+            return None
+        except Exception:
+            return None
+
     def collect(self) -> List[Metric]:
         if not self.endpoint:
             return []
@@ -76,13 +95,17 @@ class MgmtConsoleCollector(BaseCollector):
                                 "job_id": str(job_id),
                                 "status": status,
                                 "type": job_type,
+                                "resource_type": "mgmt_console_resource", # Fallback for compatibility
+                                "source_resource": job.get('source', job.get('hostname', 'mgmt_console_unknown')),
                                 "source": "mgmt_console"
                             },
                             fields={
                                 "duration": int(job.get('duration', 0)),
                                 "size_bytes": int(job.get('bytes', 0))
                             },
-                            timestamp=time.time() 
+                            },
+                            # Use ended time for timestamp if available, otherwise current time
+                            timestamp=self._parse_job_time(job) or time.time()
                         ))
             else:
                 self.logger.error(f"Failed to fetch jobs: {resp.status_code} - {resp.text}")
