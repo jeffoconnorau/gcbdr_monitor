@@ -51,8 +51,23 @@ class NativeGCBDRCollector(BaseCollector):
         # 2. Bytes Transferred (Incremental)
         inc_size_gib = float(payload.get('incrementalBackupSizeGib', 0))
         data['bytes_transferred'] = int(inc_size_gib * 1024 * 1024 * 1024)
+        data['size_bytes'] = data['bytes_transferred'] # Alias for compatibility
 
-        # 3. Other Metadata
+        # 3. Duration
+        start_time = payload.get('startTime')
+        end_time = payload.get('endTime')
+        duration = 0
+        if start_time and end_time:
+            try:
+                # Handle ISO formatting with Z
+                start = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                duration = int((end - start).total_seconds())
+            except Exception:
+                pass
+        data['duration'] = duration
+        
+        # 4. Other Metadata
         data['jobId'] = payload.get('jobId', 'unknown')
         data['jobStatus'] = payload.get('jobStatus', 'unknown')
         data['jobCategory'] = payload.get('jobCategory', 'unknown')
@@ -80,6 +95,7 @@ class NativeGCBDRCollector(BaseCollector):
             bytes_transferred = int(payload.get('transferSize'))
         
         data['bytes_transferred'] = bytes_transferred
+        data['size_bytes'] = bytes_transferred # Alias
 
         # 2. Total Size
         total_size_bytes = 0
@@ -89,8 +105,12 @@ class NativeGCBDRCollector(BaseCollector):
             total_size_bytes = int(payload.get('appSize'))
             
         data['total_resource_size_bytes'] = total_size_bytes
+        
+        # 3. Duration (Appliance often has duration or eventTime)
+        # 44003 is instant usually, but lets check for duration
+        data['duration'] = int(payload.get('duration', 0))
 
-        # 3. Other Metadata
+        # 4. Other Metadata
         data['jobId'] = payload.get('jobName') or payload.get('srcid') or 'unknown_job'
         data['jobStatus'] = 'SUCCESSFUL' # 44003 implies success
         data['jobCategory'] = 'ApplianceBackup'
@@ -140,9 +160,6 @@ class NativeGCBDRCollector(BaseCollector):
                 
                 # Skip if no useful data extracted (e.g. not a job completion log)
                 if not parsed_data.get('jobId') or parsed_data.get('jobId') == 'unknown':
-                    # Fallback for generic logs if we want to keep them?
-                    # For now, let's only emit if we have some job context
-                    # Or check valid fields
                     pass
 
                 job_id = parsed_data.get('jobId', 'unknown')
@@ -166,7 +183,9 @@ class NativeGCBDRCollector(BaseCollector):
                     },
                     fields={
                         "bytes_transferred": int(parsed_data.get('bytes_transferred', 0)),
+                        "size_bytes": int(parsed_data.get('size_bytes', 0)),
                         "total_resource_size_bytes": int(parsed_data.get('total_resource_size_bytes', 0)),
+                        "duration": int(parsed_data.get('duration', 0)),
                         "message": str(payload)
                     },
                     timestamp=ts
