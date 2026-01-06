@@ -641,7 +641,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "import \"math\"\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"source_resource\"])\n\nstats = data\n  |> mean()\n  |> set(key: \"_field\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"_field\", value: \"stddev\")\n\njoin(tables: {mean: stats, stddev: stddev, original: data}, on: [\"source_resource\"])\n  |> map(fn: (r) => ({ r with anomaly: if r[\"_value_original\"] > (r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])) then 1 else 0 }))\n  |> group()\n  |> sum(columns: [\"anomaly\"])",
+          "query": "import \"math\"\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"source_resource\"])\n\nstats = data\n  |> mean()\n  |> set(key: \"_field\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"_field\", value: \"stddev\")\n\njoin(tables: {mean: stats, stddev: stddev, original: data}, on: [\"source_resource\"])\n  |> map(fn: (r) => ({ r with anomaly: if r[\"_value_original\"] > (r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])) then 1 else 0 }))\n  |> group()\n  |> sum(column: \"anomaly\")",
           "refId": "A"
         }
       ]
