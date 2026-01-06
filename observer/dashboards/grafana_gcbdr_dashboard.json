@@ -469,6 +469,181 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "displayName": "${__field.labels.source_resource}"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 7,
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "title": "Top Ten Talkers (Largest Change Rate - 7d)",
+      "type": "bargauge",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> group(columns: [\"source_resource\"])\n  |> sum()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 8,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showthresholdMarkers": true
+      },
+      "title": "Anomaly Count (Duration > 2*StdDev)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "query": "import \"math\"\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"source_resource\"])\n\nstats = data\n  |> mean()\n  |> set(key: \"_field\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"_field\", value: \"stddev\")\n\njoin(tables: {mean: stats, stddev: stddev, original: data}, on: [\"source_resource\"])\n  |> map(fn: (r) => ({ r with anomaly: if r[\"_value_original\"] > (r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])) then 1 else 0 }))\n  |> group()\n  |> sum(columns: [\"anomaly\"])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 9,
+      "options": {
+        "footer": {
+          "enablePagination": true,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "title": "Top 5 Anomalies (Duration)",
+      "type": "table",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "query": "import \"math\"\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> group(columns: [\"source_resource\"])\n\nstats = data\n  |> mean()\n  |> set(key: \"_field\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"_field\", value: \"stddev\")\n\njoin(tables: {mean: stats, stddev: stddev, original: data}, on: [\"source_resource\"])\n  |> filter(fn: (r) => r[\"_value_original\"] > (r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])))\n  |> map(fn: (r) => ({ \n      _time: r[\"_time_original\"],\n      source_resource: r[\"source_resource\"],\n      duration: r[\"_value_original\"],\n      mean: r[\"_value_mean\"],\n      limit: r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])\n  }))\n  |> group()\n  |> sort(columns: [\"duration\"], desc: true)\n  |> limit(n: 5)",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "schemaVersion": 38,
