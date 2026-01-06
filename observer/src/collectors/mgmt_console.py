@@ -103,7 +103,6 @@ class MgmtConsoleCollector(BaseCollector):
                                 "duration": int(job.get('duration', 0)),
                                 "size_bytes": int(job.get('bytes', 0))
                             },
-                            },
                             # Use ended time for timestamp if available, otherwise current time
                             timestamp=self._parse_job_time(job) or time.time()
                         ))
