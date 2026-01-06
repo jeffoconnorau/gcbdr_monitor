@@ -350,7 +350,69 @@
           },
           "displayName": "${__field.labels.source_resource}"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "(Failed|fail|Fail|ERROR|CRITICAL)",
+                      "result": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "Failed"
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "(Succeeded|succeeded|Successful|success)",
+                      "result": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "Success"
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "(Running|run)",
+                      "result": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "Running"
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "(Not Run|not run|Aborted|Cancelled|SKIPPED)",
+                      "result": {
+                        "color": "orange",
+                        "index": 3,
+                        "text": "Skipped"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
