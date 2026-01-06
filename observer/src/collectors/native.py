@@ -172,17 +172,27 @@ class NativeGCBDRCollector(BaseCollector):
                     # Default to native vault/job parser
                     parsed_data = self._parse_job_payload(payload)
                 
-                # Skip if no useful data extracted (e.g. not a job completion log)
-                if not parsed_data.get('jobId') or parsed_data.get('jobId') == 'unknown':
-                    pass
-
-                job_id = parsed_data.get('jobId', 'unknown')
+                # Determine effective Job ID for uniqueness
+                # If payload has no jobId, use insertId (or timestamp hash) as fallback
+                job_id = parsed_data.get('jobId')
+                if not job_id or job_id == 'unknown':
+                    if entry.insert_id:
+                        job_id = entry.insert_id
+                    else:
+                        # Fallback to timestamp if even insert_id is missing (rare)
+                        job_id = f"job_{int(entry.timestamp.timestamp())}"
+                
                 status = parsed_data.get('jobStatus', 'unknown')
                 
                 # If we still have unknown status but it's a severity error, mark it
                 if status == 'unknown' and entry.severity == 'ERROR':
                     status = 'FAILED'
                 
+                # Skip irrelevant logs ONLY if we really can't identify them AND status is unknown
+                # The user's SQL relies on logs that might not have explicit jobIds but have Status
+                if job_id == 'unknown' and status == 'unknown':
+                    continue
+
                 ts = entry.timestamp.timestamp() if entry.timestamp else now.timestamp()
                 
                 metrics.append(Metric(
