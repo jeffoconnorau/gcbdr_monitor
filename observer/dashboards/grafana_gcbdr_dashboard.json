@@ -164,7 +164,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_job_status\")\n  |> filter(fn: (r) => r[\"status\"] == \"fail\")\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\")\n  |> count()",
           "refId": "A"
         }
       ]
