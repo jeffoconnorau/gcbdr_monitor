@@ -439,8 +439,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Failed"
+              "id": "byRegexp",
+              "options": "/(Failed|fail|Fail|ERROR|CRITICAL)/"
             },
             "properties": [
               {
@@ -454,8 +454,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Running"
+              "id": "byRegexp",
+              "options": "/(Running|run)/"
             },
             "properties": [
               {
@@ -469,8 +469,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Succeeded"
+              "id": "byRegexp",
+              "options": "/(Succeeded|succeeded|Successful|success)/"
             },
             "properties": [
               {
@@ -484,23 +484,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Successful"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Not Run"
+              "id": "byRegexp",
+              "options": "/(Not Run|not run|Aborted|Cancelled)/"
             },
             "properties": [
               {
