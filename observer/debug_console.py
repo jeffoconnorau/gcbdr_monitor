@@ -60,8 +60,13 @@ def test_endpoint(base_url, path, token, session_id=None):
                 items = data.get('items', []) if isinstance(data, dict) else data
                 if isinstance(items, list) and len(items) > 0:
                     print(f"--- Found {len(items)} jobs. Scanning first 20 for timestamps ---")
+                    # Print FULL keys for the first job to debug field names
+                    if len(items) > 0:
+                        print(f"DEBUG: First Job Keys: {list(items[0].keys())}")
+                        print(f"DEBUG: First Job Full: {items[0]}")
+
                     for i, job in enumerate(items[:20]):
-                        print(f"Job {i}: id={job.get('id')} status={job.get('status')}")
+                        print(f"Job {i}: id={job.get('id')} status={job.get('status')} type={job.get('jobtype') or job.get('jobclass') or job.get('type')}")
                         print(f"   queuedate: {job.get('queuedate')}")
                         print(f"   startdate: {job.get('startdate')}")
                         print(f"   enddate:   {job.get('enddate')}")
