@@ -978,7 +978,7 @@
       "id": 9,
       "options": {
         "footer": {
-          "enablePagination": true,
+          "enablePagination": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1012,27 +1012,11 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
             "axisLabel": "Jobs",
             "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
+            "axisColorMode": "text",
             "fillOpacity": 80,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "normal"
@@ -1103,10 +1087,11 @@
         "tooltip": {
           "mode": "single",
           "sort": "none"
-        }
+        },
+        "xField": "_time"
       },
       "title": "Restore Job Count (Last 7 Days)",
-      "type": "timeseries",
+      "type": "barchart",
       "targets": [
         {
           "datasource": {
