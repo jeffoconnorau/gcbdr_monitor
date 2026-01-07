@@ -131,7 +131,10 @@ class MgmtConsoleCollector(BaseCollector):
                     for job in jobs:
                         job_id = job.get('id', 'unknown')
                         status = str(job.get('status', 'unknown')).lower()
-                        job_type = str(job.get('jobtype', 'unknown')).lower()
+                        # 'jobclass' appears to be the correct field for Actifio/GCBDR (e.g. 'snapshot', 'LogBackup')
+                        # Fallback to 'jobtype' or 'type' if missing
+                        job_type_raw = job.get('jobclass') or job.get('jobtype') or job.get('type') or 'unknown'
+                        job_type = str(job_type_raw).lower()
                         job_name = job.get('jobname', 'unknown')
                         
                         # Debug logging to verify what we are filtering
