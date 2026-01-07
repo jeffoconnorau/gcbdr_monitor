@@ -54,7 +54,22 @@ def test_endpoint(base_url, path, token, session_id=None):
     try:
         resp = requests.get(url, headers=headers, verify=False, timeout=10)
         print(f"Status: {resp.status_code}")
-        print(f"Response: {resp.text[:200]}...") # Truncate
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                items = data.get('items', []) if isinstance(data, dict) else data
+                if isinstance(items, list) and len(items) > 0:
+                    print("--- FIRST JOB SAMPLE ---")
+                    import json
+                    print(json.dumps(items[0], indent=2))
+                    print("------------------------")
+                else:
+                     print(f"Response (Truncated): {resp.text[:200]}...")
+            except:
+                print(f"Response (Truncated): {resp.text[:200]}...")
+        else:
+            print(f"Response: {resp.text[:200]}...")
+
         return resp.status_code == 200
     except Exception as e:
         print(f"Error: {e}")
