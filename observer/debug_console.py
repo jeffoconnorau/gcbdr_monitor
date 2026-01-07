@@ -59,12 +59,16 @@ def test_endpoint(base_url, path, token, session_id=None):
                 data = resp.json()
                 items = data.get('items', []) if isinstance(data, dict) else data
                 if isinstance(items, list) and len(items) > 0:
-                    print("--- FIRST JOB SAMPLE ---")
-                    import json
-                    print(json.dumps(items[0], indent=2))
+                    print(f"--- Found {len(items)} jobs. Scanning first 20 for timestamps ---")
+                    for i, job in enumerate(items[:20]):
+                        print(f"Job {i}: id={job.get('id')} status={job.get('status')}")
+                        print(f"   queuedate: {job.get('queuedate')}")
+                        print(f"   startdate: {job.get('startdate')}")
+                        print(f"   enddate:   {job.get('enddate')}")
+                        print(f"   ended:     {job.get('ended')}")
                     print("------------------------")
                 else:
-                     print(f"Response (Truncated): {resp.text[:200]}...")
+                    print(f"Response (Truncated): {resp.text[:200]}...")
             except:
                 print(f"Response (Truncated): {resp.text[:200]}...")
         else:
