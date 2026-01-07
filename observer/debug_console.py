@@ -1,5 +1,7 @@
 import requests
 import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 import urllib3
 import google.auth
 from google.auth.transport.requests import Request
