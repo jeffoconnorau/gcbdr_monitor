@@ -193,7 +193,7 @@ class NativeGCBDRCollector(BaseCollector):
                     parsed_data = self._parse_appliance_payload(payload)
                 else:
                     # Default to native vault/job parser
-                    parsed_data = self._parse_job_payload(payload)
+                    parsed_data = self._parse_job_payload(payload, str(entry.resource.type))
                 
                 # Determine effective Job ID for uniqueness
                 # If payload has no jobId, use insertId (or timestamp hash) as fallback
