@@ -1113,7 +1113,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] =~ /(RESTORE|RECOVERY|restore|recovery|Restore|Recovery)/)\n  |> group(columns: [\"status\"])\n  |> aggregateWindow(every: 1d, fn: count, createEmpty: true)\n  |> yield(name: \"count\")",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] =~ /(RESTORE|RECOVERY|restore|recovery|Restore|Recovery|mount|Mount)/)\n  |> group(columns: [\"status\"])\n  |> aggregateWindow(every: 1d, fn: count, createEmpty: true)\n  |> yield(name: \"count\")",
           "refId": "A"
         }
       ]
