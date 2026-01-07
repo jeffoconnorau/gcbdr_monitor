@@ -57,6 +57,7 @@ class NativeGCBDRCollector(BaseCollector):
         start_time = payload.get('startTime')
         end_time = payload.get('endTime')
         duration = 0
+        end = None
         if start_time and end_time:
             try:
                 # Handle ISO formatting with Z
