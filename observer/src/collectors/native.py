@@ -80,23 +80,27 @@ class NativeGCBDRCollector(BaseCollector):
             r_type = payload.get('protectedResourceDetails', {}).get('resourceType')
         
         # Fallback to sourceResourceName suffix or Cloud Logging resource type
-        if (not r_type or str(r_type).lower() == 'unknown') and resource_type_str == "backupdr.googleapis.com/BackupDRProject":
-             # Try to deduce from appName or sourceResourceName if available
-             # e.g. "projects/p/locations/l/clusters/c/instances/i" -> "AlloyDB"
-             src_name = payload.get('sourceResourceName', '')
-             if 'alloydb' in src_name.lower():
-                 r_type = "AlloyDB"
-             elif 'compute' in src_name.lower():
-                 r_type = "GCE"
-             else:
-                 r_type = "BackupDRProject" # Generic fallback
+        if (not r_type or str(r_type).lower() == 'unknown'):
+            if resource_type_str == "backupdr.googleapis.com/BackupDRProject":
+                 # Try to deduce from appName or sourceResourceName if available
+                 # e.g. "projects/p/locations/l/clusters/c/instances/i" -> "AlloyDB"
+                 src_name = payload.get('sourceResourceName', '')
+                 if 'alloydb' in src_name.lower():
+                     r_type = "AlloyDB"
+                 elif 'compute' in src_name.lower():
+                     r_type = "GCE"
+                 else:
+                     r_type = "BackupDRProject" # Generic fallback
+            elif "ManagementConsole" in resource_type_str or "ManagementServer" in resource_type_str:
+                r_type = "ManagementConsole"
 
         data['resourceType'] = r_type if r_type else 'unknown'
         data['sourceResourceName'] = payload.get('sourceResourceName', 'unknown')
 
-        # Debug logging for unknown resource types to help identify AlloyDB/others
-        if str(data['resourceType']).lower() == 'unknown':
-             self.logger.warning(f"Unknown Resource Type! src_name='{data['sourceResourceName']}' r_type_str='{resource_type_str}' payload_type='{payload.get('resourceType')}'")
+        # Debug logging for unknown resource types to help identifying
+        if str(data['resourceType']).lower() == 'unknown' or data['resourceType'] == 'ManagementConsole':
+             # Log payload for ManagementConsole too, to see if it hides AlloyDB info
+             self.logger.warning(f"Unknown/Mgmt Resource! r_type='{data['resourceType']}' src='{data['sourceResourceName']}' payload={payload}")
 
         return data
 
