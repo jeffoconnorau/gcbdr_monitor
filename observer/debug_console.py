@@ -20,10 +20,37 @@ def get_token():
         print(f"Auth Error: {e}")
         return None, None
 
-def test_endpoint(base_url, path, token):
+def create_session(base_url, token):
+    url = f"{base_url.rstrip('/')}/actifio/session"
+    print(f"\nCreating Session at: {url}")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Length": "0"
+    }
+    try:
+        resp = requests.post(url, headers=headers, verify=False, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            session_id = data.get('session_id')
+            print(f"Session Created! ID: {session_id}")
+            return session_id
+        else:
+            print(f"Session Creation Failed: {resp.status_code} - {resp.text}")
+            return None
+    except Exception as e:
+        print(f"Session Creation Error: {e}")
+        return None
+
+def test_endpoint(base_url, path, token, session_id=None):
     url = f"{base_url.rstrip('/')}{path}"
     print(f"\nTesting: {url}")
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+    if session_id:
+        headers["backupdr-management-session"] = f"Actifio {session_id}"
+    
     try:
         resp = requests.get(url, headers=headers, verify=False, timeout=10)
         print(f"Status: {resp.status_code}")
@@ -47,31 +74,20 @@ if __name__ == "__main__":
     token, project = get_token()
     if not token:
         print("Could not get Google Auth Token. Are you running in GCP or with ADC?")
-        # Fallback for manual token if needed?
         sys.exit(1)
 
+    # 1. Create Session
+    session_id = create_session(base_url, token)
+    if not session_id:
+        print("WARNING: Proceeding without session_id (expect failures)...")
+
     paths = [
-        # Common Actifio Paths
-        "/actifio/api/v1/jobstatus",
         "/actifio/api/jobstatus",
-        "/actifio/api/jobs",
-        
-        # New GCBDR / AGM Paths
-        "/agm/api/jobs",
-        "/agm/api/jobstatus",
-        "/agm/api/v1/jobs",
-        
-        # Universal Data Engine Paths
-        "/UD/jobs",
-        "/UD/api/jobs",
-        
-        # Direct API
-        "/api/jobs",
-        "/api/v1/jobs",
-        "/jobs",
+        "/actifio/api/info",
+        "/actifio/api/login",
     ]
 
     print(f"Probing {base_url}...")
     for path in paths:
-        if test_endpoint(base_url, path, token):
+        if test_endpoint(base_url, path, token, session_id):
             print(f"--> SUCCESS found at {path}")
