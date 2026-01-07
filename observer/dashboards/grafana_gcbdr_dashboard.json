@@ -1098,7 +1098,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] =~ /(RESTORE|RECOVERY|restore|recovery|Restore|Recovery|mount|Mount|Recovery Job)/)\n  |> map(fn: (r) => ({ r with type: if r[\"type\"] =~ /(RESTORE|RECOVERY|Recovery Job|recovery)/ then \"Restore\" else r[\"type\"] }))\n  |> group(columns: [\"source\", \"type\"])\n  |> aggregateWindow(every: 1d, fn: count, createEmpty: true)\n  |> yield(name: \"count\")",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] =~ /(?i)(restore|recovery|mount)/)\n  |> map(fn: (r) => ({ r with type: \n      if r[\"type\"] =~ /(?i)(mount)/ then \"Mount\" \n      else \"Restore\" \n  }))\n  |> group(columns: [\"source\", \"type\"])\n  |> aggregateWindow(every: 1d, fn: count, createEmpty: true)\n  |> yield(name: \"count\")",
           "refId": "A"
         }
       ]
