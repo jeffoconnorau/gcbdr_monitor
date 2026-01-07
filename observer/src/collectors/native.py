@@ -76,17 +76,17 @@ class NativeGCBDRCollector(BaseCollector):
         
         # Robust Resource Type Extraction
         r_type = payload.get('resourceType')
-        if not r_type:
+        if not r_type or str(r_type).lower() == 'unknown':
             r_type = payload.get('protectedResourceDetails', {}).get('resourceType')
         
         # Fallback to sourceResourceName suffix or Cloud Logging resource type
-        if not r_type and resource_type_str == "backupdr.googleapis.com/BackupDRProject":
+        if (not r_type or str(r_type).lower() == 'unknown') and resource_type_str == "backupdr.googleapis.com/BackupDRProject":
              # Try to deduce from appName or sourceResourceName if available
              # e.g. "projects/p/locations/l/clusters/c/instances/i" -> "AlloyDB"
              src_name = payload.get('sourceResourceName', '')
-             if 'alloydb' in src_name:
+             if 'alloydb' in src_name.lower():
                  r_type = "AlloyDB"
-             elif 'compute' in src_name:
+             elif 'compute' in src_name.lower():
                  r_type = "GCE"
              else:
                  r_type = "BackupDRProject" # Generic fallback
