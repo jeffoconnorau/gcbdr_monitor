@@ -78,8 +78,19 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showthresholdMarkers": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
       },
       "pluginVersion": "10.0.0",
       "title": "Native Backup Jobs (30d)",
@@ -90,7 +101,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"RESTORE\" and r[\"type\"] != \"RECOVERY\")\n  |> group(columns: [])\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"Restore\")\n  |> group(columns: [])\n  |> count()",
           "refId": "A"
         }
       ]
@@ -115,8 +126,19 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showthresholdMarkers": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
       },
       "pluginVersion": "10.0.0",
       "title": "Native Restore Jobs (30d)",
@@ -127,7 +149,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] == \"RESTORE\" or r[\"type\"] == \"RECOVERY\")\n  |> group(columns: [])\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] == \"Restore\")\n  |> group(columns: [])\n  |> count()",
           "refId": "A"
         }
       ]
@@ -152,8 +174,19 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showthresholdMarkers": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
       },
       "pluginVersion": "10.0.0",
       "title": "Mgmt Console Backup Jobs (30d)",
@@ -164,7 +197,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\")\n  |> group(columns: [])\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\" and r[\"type\"] != \"mount\")\n  |> group(columns: [])\n  |> count()",
           "refId": "A"
         }
       ]
@@ -189,8 +222,19 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showthresholdMarkers": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        }
       },
       "pluginVersion": "10.0.0",
       "title": "Mgmt Console Restore Jobs (30d)",
@@ -201,7 +245,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] == \"restore\")\n  |> group(columns: [])\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] == \"restore\" or r[\"type\"] == \"mount\")\n  |> group(columns: [])\n  |> count()",
           "refId": "A"
         }
       ]
