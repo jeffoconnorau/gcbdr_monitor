@@ -142,7 +142,8 @@ class MgmtConsoleCollector(BaseCollector):
                                 "type": job_type,
                                 "resource_type": job.get('apptype', 'mgmt_console_resource'),
                                 "source_resource": job.get('appname', 'mgmt_console_unknown'),
-                                "source": "mgmt_console"
+                                "source": "mgmt_console",
+                                "project_id": "mgmt-console"
                             },
                             fields={
                                 "duration": int(job.get('duration', 0) or 0),
