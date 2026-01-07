@@ -46,8 +46,13 @@ def probe_logs(project_id, lookback_hours=336): # Look back 14 days
             counts[key] += 1
             
             # Print explicit AlloyDB matches immediately
-            if "alloy" in str(payload).lower() or "alloy" in r_type.lower() or "alloy" in src_name.lower():
-                print(f"\n!!! FOUND ALLOYDB MATCH !!!")
+            is_alloy = "alloy" in str(payload).lower() or "alloy" in r_type.lower() or "alloy" in src_name.lower()
+            
+            # ALSO print one sample of the generic "BackupDRProject" jobs to see what they are
+            is_generic_job = "bdr_backup_restore_jobs" in log_name and "BackupDRProject" in r_type
+            
+            if is_alloy or (is_generic_job and counts[key] == 1):
+                print(f"\n!!! MATCH FOUND ({'ALLOY' if is_alloy else 'GENERIC JOB'}) !!!")
                 print(f"Key: {key}")
                 print(f"Payload: {payload}")
                 print("-" * 50)
