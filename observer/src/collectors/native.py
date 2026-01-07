@@ -55,7 +55,7 @@ class NativeGCBDRCollector(BaseCollector):
 
         # 3. Duration
         start_time = payload.get('startTime')
-        end_time = payload.get('endTime')
+        end_time = payload.get('endTime') or payload.get('job_end_time') # Fallback for MgmtConsole
         duration = 0
         end = None
         if start_time and end_time:
