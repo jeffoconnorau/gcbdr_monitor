@@ -36,7 +36,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "mean"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -53,7 +53,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "native = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"type\"] != \"RESTORE\" and r[\"type\"] != \"RECOVERY\")\n  |> keep(columns: [\"_time\", \"job_id\"])\n\nmgmt = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\")\n  |> keep(columns: [\"_time\", \"job_id\"])\n\nunion(tables: [native, mgmt])\n  |> window(every: 1d)\n  |> count()\n  |> group()\n  |> mean()",
+          "query": "native = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"type\"] != \"RESTORE\" and r[\"type\"] != \"RECOVERY\")\n\nmgmt = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\")\n\nunion(tables: [native, mgmt])\n  |> group(columns: [])\n  |> window(every: 1d)\n  |> count(column: \"_value\")\n  |> group()\n  |> mean()",
           "refId": "A"
         }
       ]
@@ -73,7 +73,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "count"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -110,7 +110,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "count"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -147,7 +147,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "count"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -184,7 +184,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "count"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -878,7 +878,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> group(columns: [\"source_resource\"])\n  |> sum()\n  |> group()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> group(columns: [\"source_resource\"])\n  |> sum()\n  |> group()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)\n  |> group(columns: [\"source_resource\"])",
           "refId": "A"
         }
       ]
