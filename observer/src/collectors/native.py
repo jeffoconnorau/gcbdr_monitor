@@ -108,10 +108,13 @@ class NativeGCBDRCollector(BaseCollector):
         data['resourceType'] = r_type if r_type else 'unknown'
         data['sourceResourceName'] = payload.get('sourceResourceName', 'unknown')
 
-        # Debug logging for unknown resource types to help identifying
         if str(data['resourceType']).lower() == 'unknown' or data['resourceType'] == 'ManagementConsole':
-             # Log payload for ManagementConsole too, to see if it hides AlloyDB info
-             self.logger.warning(f"Unknown/Mgmt Resource! r_type='{data['resourceType']}' src='{data['sourceResourceName']}' payload={payload}")
+             # Skip empty BDRBackupVaultDetailsLog system events
+             if hasattr(payload, 'get') and payload.get('@type', '').endswith('BDRBackupVaultDetailsLog') and not payload.get('resourceType'):
+                 data['jobStatus'] = 'SKIPPED' # Mark for exclusion
+             else:
+                 # Log payload for ManagementConsole too, to see if it hides AlloyDB info
+                 self.logger.warning(f"Unknown/Mgmt Resource! r_type='{data['resourceType']}' src='{data['sourceResourceName']}' payload={payload}")
 
         return data
 
