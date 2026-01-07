@@ -107,7 +107,7 @@ class MgmtConsoleCollector(BaseCollector):
                             timestamp=self._parse_job_time(job) or time.time()
                         ))
             else:
-                self.logger.error(f"Failed to fetch jobs: {resp.status_code} - {resp.text}")
+                self.logger.error(f"Failed to fetch jobs from {url}: {resp.status_code} - {resp.text}")
                     
         except Exception as e:
             self.logger.error(f"Error collecting from Management Console: {e}")
