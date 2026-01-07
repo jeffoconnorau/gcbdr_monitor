@@ -19,7 +19,7 @@ class NativeGCBDRCollector(BaseCollector):
         else:
             self.logger.warning("Google Cloud Project ID not configured. Collector will be idle.")
 
-    def _parse_job_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_job_payload(self, payload: Dict[str, Any], resource_type_str: str = None) -> Dict[str, Any]:
         """
         Extracts relevant data from a log entry's jsonPayload.
         Based on analyzer.py logic.
@@ -73,7 +73,25 @@ class NativeGCBDRCollector(BaseCollector):
         data['jobId'] = payload.get('jobId', 'unknown')
         data['jobStatus'] = payload.get('jobStatus', 'unknown')
         data['jobCategory'] = payload.get('jobCategory', 'unknown')
-        data['resourceType'] = payload.get('resourceType', 'unknown')
+        
+        # Robust Resource Type Extraction
+        r_type = payload.get('resourceType')
+        if not r_type:
+            r_type = payload.get('protectedResourceDetails', {}).get('resourceType')
+        
+        # Fallback to sourceResourceName suffix or Cloud Logging resource type
+        if not r_type and resource_type_str == "backupdr.googleapis.com/BackupDRProject":
+             # Try to deduce from appName or sourceResourceName if available
+             # e.g. "projects/p/locations/l/clusters/c/instances/i" -> "AlloyDB"
+             src_name = payload.get('sourceResourceName', '')
+             if 'alloydb' in src_name:
+                 r_type = "AlloyDB"
+             elif 'compute' in src_name:
+                 r_type = "GCE"
+             else:
+                 r_type = "BackupDRProject" # Generic fallback
+
+        data['resourceType'] = r_type if r_type else 'unknown'
         data['sourceResourceName'] = payload.get('sourceResourceName', 'unknown')
 
         return data
