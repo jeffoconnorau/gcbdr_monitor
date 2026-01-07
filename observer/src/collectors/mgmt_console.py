@@ -61,6 +61,24 @@ class MgmtConsoleCollector(BaseCollector):
         except Exception:
             return None
 
+    def _get_session_id(self, token):
+        """Exchange IAM token for Actifio Session ID."""
+        try:
+            url = f"{self.endpoint}/actifio/session"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Length": "0"
+            }
+            resp = requests.post(url, headers=headers, verify=False, timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get('session_id')
+            else:
+                self.logger.error(f"Failed to create session: {resp.status_code} - {resp.text}")
+                return None
+        except Exception as e:
+            self.logger.error(f"Session creation error: {e}")
+            return None
+
     def collect(self) -> List[Metric]:
         if not self.endpoint:
             return []
@@ -70,24 +88,34 @@ class MgmtConsoleCollector(BaseCollector):
             self.logger.warning("No valid IAM token available. Skipping collection.")
             return []
 
+        # 1. Get Session ID
+        session_id = self._get_session_id(token)
+        if not session_id:
+            return []
+
         metrics = []
         try:
-            # API Base is typically /actifio/api
-            url = f"{self.endpoint}/actifio/api/jobstatus"
+            # 2. Fetch Jobs using Session ID and correct path (no /api/)
+            url = f"{self.endpoint}/actifio/jobstatus"
             headers = {
                 "Authorization": f"Bearer {token}",
+                "backupdr-management-session": f"Actifio {session_id}",
                 "Accept": "application/json"
             }
             
             resp = requests.get(url, headers=headers, verify=False, timeout=30)
             
             if resp.status_code == 200:
-                jobs = resp.json()
+                data = resp.json()
+                # Actifio API often returns { "items": [...] } wrapper
+                jobs = data.get('items', []) if isinstance(data, dict) else data
+                
                 if isinstance(jobs, list):
                     for job in jobs:
                         job_id = job.get('id', 'unknown')
                         status = job.get('status', 'unknown')
                         job_type = job.get('jobtype', 'unknown')
+                        job_name = job.get('jobname', 'unknown')
                         
                         metrics.append(Metric(
                             name="mgmt_console_job",
@@ -95,13 +123,14 @@ class MgmtConsoleCollector(BaseCollector):
                                 "job_id": str(job_id),
                                 "status": status,
                                 "type": job_type,
-                                "resource_type": "mgmt_console_resource", # Fallback for compatibility
-                                "source_resource": job.get('source', job.get('hostname', 'mgmt_console_unknown')),
+                                "resource_type": job.get('apptype', 'mgmt_console_resource'),
+                                "source_resource": job.get('appname', 'mgmt_console_unknown'),
                                 "source": "mgmt_console"
                             },
                             fields={
-                                "duration": int(job.get('duration', 0)),
-                                "size_bytes": int(job.get('bytes', 0))
+                                "duration": int(job.get('duration', 0) or 0),
+                                "size_bytes": int(job.get('bytes', 0) or 0),
+                                "job_name": job_name
                             },
                             # Use ended time for timestamp if available, otherwise current time
                             timestamp=self._parse_job_time(job) or time.time()
