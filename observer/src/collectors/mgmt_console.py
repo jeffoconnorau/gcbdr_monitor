@@ -42,24 +42,41 @@ class MgmtConsoleCollector(BaseCollector):
             self.logger.error(f"Failed to refresh token: {e}")
             return None
 
-    def _parse_job_time(self, job: dict) -> float:
-        """Parse job completion time from various possible fields."""
-        try:
-            # Fields in order of preference
-            time_fields = ['ended', 'completed', 'updated', 'created']
-            for field in time_fields:
-                val = job.get(field)
-                if val:
-                    # Actifio API typically returns milliseconds or ISO string
-                    # If int/float, assume milliseconds (common in Java APIs) or seconds
-                    if isinstance(val, (int, float)):
-                         # Heuristic: if > 3e9 (year 2065), it's probably millis; else seconds
-                         # Current time in millis is ~1.7e12
-                        return float(val) / 1000.0 if val > 1_000_000_000_000 else float(val)
-                    # TODO: Add string parsing if needed (e.g. ISO 8601)
-            return None
-        except Exception:
-            return None
+    def _parse_job_time(self, job: Dict[str, Any]) -> float:
+        """Parse job timestamp from various potential fields, handling microseconds."""
+        # Priority: enddate -> startdate -> queuedate
+        candidates = [
+            ('enddate', job.get('enddate')),
+            ('startdate', job.get('startdate')),
+            ('queuedate', job.get('queuedate')),
+            ('ended', job.get('ended')),
+            ('completed', job.get('completed'))
+        ]
+        
+        for name, ts in candidates:
+            if ts:
+                try:
+                    ts_float = float(ts)
+                    # Heuristic: If > 1e11 (roughly year 2286 in seconds), it's likely microseconds
+                    # Current time in seconds is ~1.7e9, in milliseconds ~1.7e12, in microseconds ~1.7e15
+                    if ts_float > 1e11 and ts_float > time.time() * 100000: # Ensure it's not just a large millisecond value
+                        self.logger.debug(f"Parsed job time '{name}' as microseconds: {ts_float}. Converted to seconds: {ts_float / 1_000_000.0}")
+                        return ts_float / 1_000_000.0
+                    else:
+                        self.logger.debug(f"Parsed job time '{name}' as seconds/milliseconds: {ts_float}. Using as is.")
+                        # If it's milliseconds, it will be handled by the timestamp=self._parse_job_time(job) or time.time()
+                        # which expects seconds. The original code had a heuristic for milliseconds.
+                        # Let's re-incorporate that for the final return if it's not microseconds.
+                        if ts_float > 1_000_000_000_000: # If > 1 trillion, likely milliseconds
+                            self.logger.debug(f"Detected milliseconds for '{name}': {ts_float}. Converted to seconds: {ts_float / 1000.0}")
+                            return ts_float / 1000.0
+                        return ts_float
+                except (ValueError, TypeError):
+                    self.logger.debug(f"Could not convert candidate '{name}' with value '{ts}' to float for job {job.get('id')}.")
+                    continue
+        
+        self.logger.warning(f"Could not parse timestamp for job {job.get('id')}. Candidates checked: {[(name, val) for name, val in candidates if val is not None]}")
+        return None
 
     def _get_session_id(self, token):
         """Exchange IAM token for Actifio Session ID."""
