@@ -242,7 +242,8 @@ class NativeGCBDRCollector(BaseCollector):
                         "status": str(status),
                         "type": str(parsed_data.get('jobCategory', 'unknown')),
                         "resource_type": str(parsed_data.get('resourceType', 'unknown')),
-                        "source_resource": str(parsed_data.get('sourceResourceName', 'unknown'))
+                        "source_resource": str(parsed_data.get('sourceResourceName', 'unknown')),
+                        "source": "native"
                     },
                     fields={
                         "bytes_transferred": int(parsed_data.get('bytes_transferred', 0)),
