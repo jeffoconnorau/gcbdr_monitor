@@ -256,13 +256,18 @@ class NativeGCBDRCollector(BaseCollector):
                 else:
                     ts = entry.timestamp.timestamp() if entry.timestamp else now.timestamp()
                 
+                # Normalize Job Category/Type
+                j_type = str(parsed_data.get('jobCategory', 'unknown'))
+                if j_type.upper() in ['RESTORE', 'RECOVERY', 'RECOVERY JOB', 'RECOVERYJOB']:
+                    j_type = 'Restore'
+                
                 metrics.append(Metric(
                     name="gcbdr_log_event",
                     tags={
                         "project": self.project_id,
                         "job_id": str(job_id),
                         "status": str(status),
-                        "type": str(parsed_data.get('jobCategory', 'unknown')),
+                        "type": j_type,
                         "resource_type": str(parsed_data.get('resourceType', 'unknown')),
                         "source_resource": str(parsed_data.get('sourceResourceName', 'unknown')),
                         "source": "native"
