@@ -134,6 +134,10 @@ class MgmtConsoleCollector(BaseCollector):
                         job_type = str(job.get('jobtype', 'unknown')).lower()
                         job_name = job.get('jobname', 'unknown')
                         
+                        # Debug logging to verify what we are filtering
+                        if job_type in ['restore', 'mount', 'clone', 'recover']:
+                            self.logger.info(f"Found Restore-like job: {job_id} [{job_type}] status={status}")
+                        
                         metrics.append(Metric(
                             name="mgmt_console_job",
                             tags={
