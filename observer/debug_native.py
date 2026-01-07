@@ -44,23 +44,37 @@ def probe_logs(project_id, lookback_hours=336): # Look back 14 days
             if key not in counts:
                 counts[key] = 0
             counts[key] += 1
+
+            # Check for specific user-provided AlloyDB strings
+            target_strings = ["alloydb-lab-cluster", "ase1-alloydb-bp-1", "ase1-dbs-bv-1", "alloy"]
+            is_target = any(s in str(payload).lower() for s in target_strings)
             
-            # Print explicit AlloyDB matches immediately
-            is_alloy = "alloy" in str(payload).lower() or "alloy" in r_type.lower() or "alloy" in src_name.lower()
-            
-            # ALSO print one sample of the generic "BackupDRProject" jobs to see what they are
-            is_generic_job = "bdr_backup_restore_jobs" in log_name and "BackupDRProject" in r_type
-            
-            if is_alloy or (is_generic_job and counts[key] == 1):
-                print(f"\n!!! MATCH FOUND ({'ALLOY' if is_alloy else 'GENERIC JOB'}) !!!")
-                print(f"Key: {key}")
+            if is_target:
+                print(f"\n!!! FOUND TARGET JOB ({log_name.split('/')[-1]}) !!!")
+                print(f"Resource Type: {r_type}")
                 print(f"Payload: {payload}")
                 print("-" * 50)
+                
+            # Keep the summary counting logic...
 
         print("\n--- SUMMARY OF FOUND LOG TYPES ---")
         for k, v in counts.items():
             print(f"{k} => {v} entries")
             
+        print("\n--- BREAKDOWN OF GENERIC BACKUP JOBS ---")
+        subtype_counts = {}
+        for entry in entries:
+            log_name = entry.log_name
+            if "bdr_backup_restore_jobs" in log_name:
+                 payload = entry.payload if isinstance(entry.payload, dict) else {}
+                 internal_type = payload.get('resourceType', 'MISSING_TYPE')
+                 if internal_type not in subtype_counts:
+                     subtype_counts[internal_type] = 0
+                 subtype_counts[internal_type] += 1
+        
+        for k, v in subtype_counts.items():
+            print(f"Internal ResourceType: '{k}' => {v} entries")
+
     except Exception as e:
         print(f"Error: {e}")
 
