@@ -52,11 +52,19 @@ if __name__ == "__main__":
 
     paths = [
         "/actifio/api/v1/jobstatus",
-        "/actifio/api/v1/jobs",
-        "/actifio/api/v1/info",
-        "/actifio/api/jobs",
         "/actifio/api/jobstatus",
+        "/actifio/api/jobs",
+        "/actifio/api/info",
         "/actifio/api/login",
+        "/actifio/api/types",
+        "/actifio/api/hosts",
+        "/actifio/api/tasks",
+        "/actifio/api/job",
+        "/actifio/api/udp/jobs",
+        "/actifio/api/mgmt/jobs",
+        "/actifio/api/monitor/jobs",
+        "/actifio/api/report/jobs",
+        "/actifio/api/status/jobs",
     ]
 
     print(f"Probing {base_url}...")
