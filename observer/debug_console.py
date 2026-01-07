@@ -51,20 +51,24 @@ if __name__ == "__main__":
         sys.exit(1)
 
     paths = [
+        # Common Actifio Paths
         "/actifio/api/v1/jobstatus",
         "/actifio/api/jobstatus",
         "/actifio/api/jobs",
-        "/actifio/api/info",
-        "/actifio/api/login",
-        "/actifio/api/types",
-        "/actifio/api/hosts",
-        "/actifio/api/tasks",
-        "/actifio/api/job",
-        "/actifio/api/udp/jobs",
-        "/actifio/api/mgmt/jobs",
-        "/actifio/api/monitor/jobs",
-        "/actifio/api/report/jobs",
-        "/actifio/api/status/jobs",
+        
+        # New GCBDR / AGM Paths
+        "/agm/api/jobs",
+        "/agm/api/jobstatus",
+        "/agm/api/v1/jobs",
+        
+        # Universal Data Engine Paths
+        "/UD/jobs",
+        "/UD/api/jobs",
+        
+        # Direct API
+        "/api/jobs",
+        "/api/v1/jobs",
+        "/jobs",
     ]
 
     print(f"Probing {base_url}...")
