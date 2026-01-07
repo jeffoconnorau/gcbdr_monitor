@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 class MgmtConsoleCollector(BaseCollector):
     def __init__(self):
         super().__init__("mgmt_console_collector")
-        self.endpoint = Config.MGMT_CONSOLE_ENDPOINT
+        self.endpoint = Config.MGMT_CONSOLE_ENDPOINT.rstrip('/') if Config.MGMT_CONSOLE_ENDPOINT else None
         self.creds = None
         
         if not self.endpoint:

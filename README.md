@@ -63,6 +63,8 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     ```
     The server will start on `http://0.0.0.0:8080` (or the port specified by `PORT` env var).
 
+    > **Note:** If using the Management Console collector, ensure `MGMT_CONSOLE_ENDPOINT` is set to the base URL **without** trailing paths (e.g., `https://10.20.30.40`). The collector automatically appends `/actifio/api/...`.
+
 3.  **Trigger Analysis:**
     You can trigger the analysis by visiting the root endpoint:
     ```bash
