@@ -74,8 +74,19 @@ class NativeGCBDRCollector(BaseCollector):
         data['jobStatus'] = payload.get('jobStatus', 'unknown')
         data['jobCategory'] = payload.get('jobCategory', 'unknown')
         
+        # Handle snake_case keys seen in ManagementConsole logs
+        if data['jobId'] == 'unknown' and 'job_id' in payload:
+            data['jobId'] = str(payload['job_id'])
+        if data['jobStatus'] == 'unknown' and 'job_status' in payload:
+            data['jobStatus'] = payload['job_status']
+        if data['jobCategory'] == 'unknown' and 'job_category' in payload:
+            data['jobCategory'] = payload['job_category']
+        
         # Robust Resource Type Extraction
         r_type = payload.get('resourceType')
+        if not r_type and 'resource_type' in payload:
+             r_type = payload['resource_type'] # ManagementConsole style
+             
         if not r_type or str(r_type).lower() == 'unknown':
             r_type = payload.get('protectedResourceDetails', {}).get('resourceType')
         
