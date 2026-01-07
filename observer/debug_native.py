@@ -2,7 +2,7 @@ import google.cloud.logging
 from datetime import datetime, timedelta, timezone
 import sys
 
-def probe_logs(project_id, lookback_hours=168): # Look back 7 days
+def probe_logs(project_id, lookback_hours=336): # Look back 14 days
     print(f"Probing Cloud Logging for ALL Backup events in project: {project_id}")
     client = google.cloud.logging.Client(project=project_id)
     
@@ -24,27 +24,38 @@ def probe_logs(project_id, lookback_hours=168): # Look back 7 days
     print(f"Filter: {filter_str}")
     
     try:
-        entries = client.list_entries(filter_=filter_str, page_size=20)
-        found_types = set()
+        entries = client.list_entries(filter_=filter_str, page_size=500)
         
-        print("\n--- SAMPLE ENTRIES ---")
-        for entry in entries:
+        counts = {}
+        
+        print("\n--- SCANNING LOGS ---")
+        for i, entry in enumerate(entries):
+            if i > 2000: break # Safety limit
+            
             r_type = entry.resource.type
             log_name = entry.log_name
-            payload = entry.payload
+            payload = entry.payload if isinstance(entry.payload, dict) else {}
             
-            # Print if we haven't seen this combo before
-            key = f"{r_type}|{log_name}"
-            if key not in found_types:
-                found_types.add(key)
-                print(f"\nType: {r_type}")
-                print(f"Log: {log_name}")
+            # Extract potential AlloyDB identifiers
+            src_name = payload.get('sourceResourceName', 'N/A')
+            job_category = payload.get('jobCategory', 'N/A')
+            
+            key = f"ResType:{r_type} | Log:{log_name.split('/')[-1]} | Cat:{job_category}"
+            if key not in counts:
+                counts[key] = 0
+            counts[key] += 1
+            
+            # Print explicit AlloyDB matches immediately
+            if "alloy" in str(payload).lower() or "alloy" in r_type.lower() or "alloy" in src_name.lower():
+                print(f"\n!!! FOUND ALLOYDB MATCH !!!")
+                print(f"Key: {key}")
                 print(f"Payload: {payload}")
-                
-                # Check for AlloyDB specific strings
-                if "alloy" in str(payload).lower() or "alloy" in r_type.lower():
-                    print("!!! FOUND ALLOYDB MATCH !!!")
-                    
+                print("-" * 50)
+
+        print("\n--- SUMMARY OF FOUND LOG TYPES ---")
+        for k, v in counts.items():
+            print(f"{k} => {v} entries")
+            
     except Exception as e:
         print(f"Error: {e}")
 
