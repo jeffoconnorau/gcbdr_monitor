@@ -95,7 +95,7 @@ class NativeGCBDRCollector(BaseCollector):
         data['sourceResourceName'] = payload.get('sourceResourceName', 'unknown')
 
         # Debug logging for unknown resource types to help identify AlloyDB/others
-        if data['resourceType'] == 'unknown':
+        if str(data['resourceType']).lower() == 'unknown':
              self.logger.warning(f"Unknown Resource Type! src_name='{data['sourceResourceName']}' r_type_str='{resource_type_str}' payload_type='{payload.get('resourceType')}'")
 
         return data
