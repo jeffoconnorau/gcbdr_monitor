@@ -115,6 +115,17 @@ Example Anomaly Output (JSON):
 }
 ```
 
+### Grafana Dashboard
+
+The repository includes a comprehensive Grafana dashboard (`observer/dashboards/grafana_gcbdr_dashboard.json`) that visualizes the collected metrics.
+
+**Key Panels:**
+- **Job Statistics**: High-level counters for Native vs. Management Console jobs (Backup/Restore counts, Daily Job Average).
+- **Data Volume**: Time-series view of data volume (GB) processed by backup jobs.
+- **Top 10 Anomalies**: A list of the most significant outliers in terms of duration or size, sorted by deviation.
+- **Detailed Job Information**: Segmented view of jobs by Source (Native/Mgmt) and Status (Success/Fail/Warning).
+- **Restore Analysis**: Stacked bar charts showing restore activity over the last 7 days.
+
 ### Notifications
 
 The tool can alert you via Google Chat or Email when anomalies are detected.
