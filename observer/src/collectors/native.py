@@ -237,6 +237,10 @@ class NativeGCBDRCollector(BaseCollector):
                 # The user's SQL relies on logs that might not have explicit jobIds but have Status
                 if job_id == 'unknown' and status == 'unknown':
                     continue
+                
+                # Explicitly drop events marked as SKIPPED (e.g. system noise)
+                if status == 'SKIPPED':
+                    continue
 
                 # Use job endTime if available for best accuracy, else log timestamp
                 if parsed_data.get('endTime'):
