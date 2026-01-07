@@ -878,7 +878,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> group(columns: [\"source_resource\"])\n  |> sum()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"size_bytes\")\n  |> group(columns: [\"source_resource\"])\n  |> sum()\n  |> group()\n  |> sort(columns: [\"_value\"], desc: true)\n  |> limit(n: 10)",
           "refId": "A"
         }
       ]
