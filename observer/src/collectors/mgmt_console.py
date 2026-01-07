@@ -153,8 +153,8 @@ class MgmtConsoleCollector(BaseCollector):
                                 "project_id": "mgmt-console"
                             },
                             fields={
-                                # Duration is typically in milliseconds for Actifio/GCBDR API
-                                "duration": int(job.get('duration', 0) or 0) // 1000,
+                                # Duration is in MICROSECONDS for Actifio/GCBDR API
+                                "duration": int(job.get('duration', 0) or 0) // 1_000_000,
                                 "size_bytes": int(job.get('bytes', 0) or 0),
                                 "job_name": job_name
                             },
