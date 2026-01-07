@@ -130,8 +130,8 @@ class MgmtConsoleCollector(BaseCollector):
                 if isinstance(jobs, list):
                     for job in jobs:
                         job_id = job.get('id', 'unknown')
-                        status = job.get('status', 'unknown')
-                        job_type = job.get('jobtype', 'unknown')
+                        status = str(job.get('status', 'unknown')).lower()
+                        job_type = str(job.get('jobtype', 'unknown')).lower()
                         job_name = job.get('jobname', 'unknown')
                         
                         metrics.append(Metric(

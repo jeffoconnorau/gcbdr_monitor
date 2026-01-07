@@ -351,7 +351,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"status\"] == \"Failed\" or r[\"status\"] == \"fail\" or r[\"status\"] == \"ERROR\" or r[\"status\"] == \"CRITICAL\")\n  |> count()",
+          "query": "from(bucket: \"gcbdr\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"status\"] == \"failed\" or r[\"status\"] == \"error\" or r[\"status\"] == \"critical\" or r[\"status\"] == \"Failed\" or r[\"status\"] == \"ERROR\")\n  |> count()",
           "refId": "A"
         }
       ]
