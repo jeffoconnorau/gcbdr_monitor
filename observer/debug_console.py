@@ -82,9 +82,24 @@ if __name__ == "__main__":
         print("WARNING: Proceeding without session_id (expect failures)...")
 
     paths = [
+        # Likely Correct Path (based on docs)
+        "/actifio/jobstatus",
+        
+        # Variations
         "/actifio/api/jobstatus",
+        "/actifio/api/v1/jobstatus",
+        "/actifio/jobs",
+        "/actifio/api/jobs",
+        "/actifio/api/v1/jobs",
+        
+        # AGM / GCBDR specific
+        "/agm/api/jobs",
+        "/agm/jobstatus",
+        
+        # Info/Login
+        "/actifio/info",
         "/actifio/api/info",
-        "/actifio/api/login",
+        "/actifio/login",
     ]
 
     print(f"Probing {base_url}...")
