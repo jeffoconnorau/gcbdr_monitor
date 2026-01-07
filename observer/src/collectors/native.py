@@ -147,11 +147,13 @@ class NativeGCBDRCollector(BaseCollector):
             # Construct Filter
             # Combined filter for Native Vault jobs and Appliance events
             # Added 'bdr_backup_restore_jobs' which was missing
+            # Added 'BackupDRProject' to catch cross-project/AlloyDB jobs
             filter_str = (
                 f'timestamp >= "{timestamp_str}" AND '
                 f'('
                 f' (resource.type="backupdr.googleapis.com/BackupVault") OR '
                 f' (resource.type="backupdr.googleapis.com/ManagementServer") OR '
+                f' (resource.type="backupdr.googleapis.com/BackupDRProject") OR '
                 f' (logName:"bdr_backup_recovery_jobs") OR '
                 f' (logName:"bdr_backup_restore_jobs") OR '
                 f' (logName:"gcb_backup_recovery_jobs") OR '
