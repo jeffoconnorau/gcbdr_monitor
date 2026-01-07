@@ -74,6 +74,18 @@ def probe_logs(project_id, lookback_hours=336): # Look back 14 days
         
         for k, v in subtype_counts.items():
             print(f"Internal ResourceType: '{k}' => {v} entries")
+            
+        print("\n--- JOB STATUS BREAKDOWN (ALL JOBS) ---")
+        status_counts = {}
+        for entry in entries:
+             payload = entry.payload if isinstance(entry.payload, dict) else {}
+             status = payload.get('jobStatus', 'MISSING_STATUS')
+             if status not in status_counts:
+                 status_counts[status] = 0
+             status_counts[status] += 1
+             
+        for k, v in status_counts.items():
+            print(f"Status: '{k}' => {v} entries")
 
     except Exception as e:
         print(f"Error: {e}")
