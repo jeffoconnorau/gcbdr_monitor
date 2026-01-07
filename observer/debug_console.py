@@ -51,13 +51,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     paths = [
+        "/actifio/api/v1/jobstatus",
+        "/actifio/api/v1/jobs",
+        "/actifio/api/v1/info",
+        "/actifio/api/jobs",
         "/actifio/api/jobstatus",
-        "/actifio/api/info",
         "/actifio/api/login",
-        "/api/jobstatus",
-        "/api/info",
-        "/jobstatus",
-        "/act/api/jobstatus"
     ]
 
     print(f"Probing {base_url}...")
