@@ -41,8 +41,19 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showthresholdMarkers": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "light-blue"
+          }
+        }
       },
       "pluginVersion": "10.0.0",
       "title": "Daily Backup Avg (30d)",
@@ -53,7 +64,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "native = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"RESTORE\" and r[\"type\"] != \"RECOVERY\")\n\nmgmt = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\")\n\nunion(tables: [native, mgmt])\n  |> group(columns: [])\n  |> window(every: 1d)\n  |> count()\n  |> group()\n  |> mean()",
+          "query": "native = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"Restore\")\n\nmgmt = from(bucket: \"gcbdr\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> filter(fn: (r) => r[\"type\"] != \"restore\")\n\nunion(tables: [native, mgmt])\n  |> group(columns: [])\n  |> window(every: 1d)\n  |> count()\n  |> group()\n  |> mean()",
           "refId": "A"
         }
       ]
