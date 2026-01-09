@@ -106,9 +106,12 @@ The tool automatically detects anomalies in backup jobs using advanced statistic
 
 Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field explaining the cause (e.g., "Size Spike (Z=4.2)", "Size Drop-off").
 
-### Grafana Dashboard
+### Observer Module (Visual Dashboard)
 
-The repository includes a comprehensive Grafana dashboard (`observer/dashboards/grafana_gcbdr_dashboard.json`) that visualizes the collected metrics.
+The **Observer Module** provides a comprehensive visual dashboard using Grafana to track long-term trends and historical data.
+For detailed setup instructions, see [observer/README.md](observer/README.md).
+
+**Dashboard File**: `observer/dashboards/grafana_gcbdr_dashboard.json`
 
 **Key Panels:**
 - **Job Statistics**: High-level counters for Native vs. Management Console jobs (Backup/Restore counts, Daily Job Average).
