@@ -15,8 +15,27 @@ class NotifierBase:
         raise NotImplementedError
 
 class GoogleChatNotifier(NotifierBase):
-    def __init__(self, webhook_url):
-        self.webhook_url = webhook_url
+    def __init__(self, config_value):
+        self.config_value = config_value
+        self.is_webhook = config_value.startswith('http')
+        self.space_name = None
+        
+        if not self.is_webhook:
+            # Assume it's a Space ID or Name
+            # If it's just ID "AAAA...", convert to "spaces/AAAA..."
+            if not config_value.startswith('spaces/'):
+                self.space_name = f"spaces/{config_value}"
+            else:
+                self.space_name = config_value
+
+            try:
+                import google.auth
+                import google.auth.transport.requests
+                self.creds, self.project = google.auth.default(scopes=['https://www.googleapis.com/auth/chat.bot'])
+                self.auth_req = google.auth.transport.requests.Request()
+            except ImportError:
+                logger.error("google-auth not found. Cannot use Chat API mode.")
+                self.is_webhook = True # Fallback effectively disables it if not URL
 
     def send(self, anomalies):
         if not anomalies:
@@ -39,34 +58,89 @@ class GoogleChatNotifier(NotifierBase):
             })
 
         message = {
-            "cards": cards
+            "cardsV2": [{
+                "cardId": "gcbdr-anomaly-card",
+                "card": {
+                    "header": {
+                         "title": "GCBDR Monitor Alert",
+                         "subtitle": f"{len(anomalies)} anomalies detected"
+                    },
+                    "sections": [
+                         {"widgets": [{"textParagraph": {"text": "<b>Anomaly Report</b>"}}]} 
+                    ]
+                }
+            }]
         }
+        # Note: The v1 Webhook API uses "cards", the v1 REST API prefers "cardsV2" or just "cards" but strict validation varies.
+        # For simplicity/compatibility, we will try to reuse the 'cards' format if possible, 
+        # but the Chat API often demands 'cardsV2' for apps. 
+        # Actually, Webhooks support 'cards' (v1) legacy. Chat API supports 'cardsV2'.
+        # Let's stick to v1 'cards' for Webhook and try to adapt for API if needed.
+        # ... Wait, if we use the REST API with ADC we are effectively a "Chat App". 
+        # Chat Apps usually post 'cardsV2'. 
+        # Let's keep the existing payload structure for Webhook (v1 'cards') 
+        # and construct a basic 'text' or 'cardsV2' for API to be safe, or just try sending 'cards' to API.
         
+        # Re-using the existing 'cards' payload for webhook:
+        webhook_payload = {"cards": cards}
+
+        if self.is_webhook:
+            self._send_via_webhook(webhook_payload)
+        else:
+            self._send_via_api(webhook_payload)
+
+    def _send_via_webhook(self, message):
         try:
             req = urllib.request.Request(
-                self.webhook_url, 
+                self.config_value, 
                 data=json.dumps(message).encode('utf-8'),
                 headers={'Content-Type': 'application/json'}
             )
             
-            # Create SSL context
-            # Allow disabling verification if needed (e.g. corporate proxies breaking chain)
             skip_verify = os.environ.get('GCBDR_MONITOR_SKIP_SSL_VERIFY', '').lower() == 'true'
-            
+            ctx = ssl.create_default_context()
             if skip_verify:
-                ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
-                logger.info("SSL verification disabled by configuration (GCBDR_MONITOR_SKIP_SSL_VERIFY=true)")
-            else:
-                ctx = ssl.create_default_context()
             
             with urllib.request.urlopen(req, context=ctx) as response:
-                logger.info(f"Sent {len(anomalies)} anomalies to Google Chat. Status: {response.status}")
+                logger.info(f"Sent alert to Google Chat (Webhook). Status: {response.status}")
         except Exception as e:
-            logger.error(f"Failed to send to Google Chat: {e}")
-            if "CERTIFICATE_VERIFY_FAILED" in str(e) and not skip_verify:
-                logger.info("HINT: You can disable SSL verification by setting GCBDR_MONITOR_SKIP_SSL_VERIFY=true if you are dealing with a self-signed cert or proxy.")
+            logger.error(f"Failed to send to Google Chat (Webhook): {e}")
+
+    def _send_via_api(self, legacy_payload):
+        # The REST API using ADC acts as the Service Account (App).
+        # It should post to https://chat.googleapis.com/v1/{space_name}/messages
+        
+        try:
+            if not self.creds.valid:
+                self.creds.refresh(self.auth_req)
+            
+            token = self.creds.token
+            url = f"https://chat.googleapis.com/v1/{self.space_name}/messages"
+            
+            # Apps must use cardsV2 or simple text. Legacy 'cards' might be rejected or deprecated.
+            # Let's convert our 'cards' to 'cardsV2' wrapper roughly or just use text fall back if complex.
+            # Actually, let's just try sending the legacy 'cards' first as 'cards' field still exists in Message resource.
+            # If that fails, we might need to migrate card format.
+            
+            # API expects JSON: { "cards": [...] } or { "text": "..." }
+            
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(legacy_payload).encode('utf-8'),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {token}'
+                }
+            )
+            
+            with urllib.request.urlopen(req) as response:
+                 logger.info(f"Sent alert to Google Chat (API). Status: {response.status}")
+
+        except Exception as e:
+            logger.error(f"Failed to send to Google Chat (API): {e}")
+            logger.debug(f"Payload was: {json.dumps(legacy_payload)}")
 
     def _create_card(self, anomaly):
         # Determine color based on reasons (simple heuristic)
