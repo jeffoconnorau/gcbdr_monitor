@@ -108,6 +108,29 @@ Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field
 
 You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
 
+### Notifications
+
+The tool can alert you via Google Chat or Email when anomalies are detected.
+
+#### Configuration
+Set the following environment variables to enable notifications:
+
+**Google Chat:**
+- `GOOGLE_CHAT_WEBHOOK`: 
+    - **Option 1 (Space ID)**: Just the Space ID (e.g., `AAAA...`) or Resource Name (`spaces/AAAA...`). Requires the Service Account to have permissions in the Google Chat Space.
+    - **Option 2 (Webhook)**: The full Webhook URL (e.g., `https://chat.googleapis.com/v1/spaces/...`).
+
+**Email:**
+- `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
+- `SMTP_PORT`: Port (default: 587).
+- `SMTP_USER`: SMTP Username/Email.
+- `SMTP_PASSWORD`: SMTP Password (or App Password).
+- `EMAIL_SENDER`: Email address to send from.
+- `EMAIL_RECIPIENTS`: Comma-separated list of recipient emails.
+
+**Pub/Sub:**
+- `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
+
 ### Deploying to Cloud Run
 
 1.  **Build the Container:**
@@ -138,28 +161,7 @@ For detailed setup instructions, see [observer/README.md](observer/README.md).
 - **Detailed Job Information**: Segmented view of jobs by Source (Native/Mgmt) and Status (Success/Fail/Warning).
 - **Restore Analysis**: Stacked bar charts showing restore activity over the last 7 days.
 
-### Notifications
 
-The tool can alert you via Google Chat or Email when anomalies are detected.
-
-#### Configuration
-Set the following environment variables to enable notifications:
-
-**Google Chat:**
-- `GOOGLE_CHAT_WEBHOOK`: 
-    - **Option 1 (Space ID)**: Just the Space ID (e.g., `AAAA...`) or Resource Name (`spaces/AAAA...`). Requires the Service Account to have permissions in the Google Chat Space.
-    - **Option 2 (Webhook)**: The full Webhook URL (e.g., `https://chat.googleapis.com/v1/spaces/...`).
-
-**Email:**
-- `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
-- `SMTP_PORT`: Port (default: 587).
-- `SMTP_USER`: SMTP Username/Email.
-- `SMTP_PASSWORD`: SMTP Password (or App Password).
-- `EMAIL_SENDER`: Email address to send from.
-- `EMAIL_RECIPIENTS`: Comma-separated list of recipient emails.
-
-**Pub/Sub:**
-- `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
 
 
 
