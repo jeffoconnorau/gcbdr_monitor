@@ -37,5 +37,24 @@ The Observer is designed to run locally or on a VM using Docker Compose.
 - **Collector (`src/`)**: A Python service that polls:
     - **Native GCBDR**: Via Google Cloud Logging API (`bdr_backup_recovery_jobs`).
     - **Management Console**: Via Actifio API (`/api/v1/jobs`).
-- **InfluxDB**: Time-series database storing metrics with tags (Status, JobType, ResourceType).
 - **Grafana**: Visualizes the data with pre-built dashboards (JSON provisioned).
+
+## Deploying to Cloud Run (Collector Only)
+
+You can deploy the **Collector** component to Google Cloud Run, but it requires an external InfluxDB to write to (e.g., InfluxDB Cloud or a VM-hosted instance).
+
+1.  **Build the Container:**
+    ```bash
+    gcloud builds submit --tag gcr.io/your-project-id/gcbdr-observer
+    ```
+
+2.  **Deploy to Cloud Run:**
+    ```bash
+    gcloud run deploy gcbdr-observer \
+      --image gcr.io/your-project-id/gcbdr-observer \
+      --platform managed \
+      --region your-region \
+      --set-env-vars="INFLUXDB_URL=https://us-east-1-1.aws.cloud2.influxdata.com,INFLUXDB_TOKEN=your-token,INFLUXDB_ORG=your-org,INFLUXDB_BUCKET=gcbdr,GOOGLE_CLOUD_PROJECT=your-project-id"
+    ```
+
+    **Note**: You must set the `INFLUXDB_*` environment variables to point to your persistent InfluxDB instance. The local `docker-compose` setup runs InfluxDB as a sidecar, which is not supported in standard Cloud Run services without externalizing the state.
