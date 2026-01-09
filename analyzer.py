@@ -681,363 +681,53 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all')
     # Usually "results" implies the list of resources. The summary counts might be confusing if they show totals but the list is empty.
     # Let's filter the jobs lists as well for consistency in the summary.
     
-import logging
-from google.cloud import logging as cloud_logging
-from datetime import datetime, timedelta, timezone
-import statistics
-import fnmatch
-from google.cloud import compute_v1
-from googleapiclient import discovery
-import re
-
-logger = logging.getLogger(__name__)
-
-def _get_time_range(days):
-    """Computes the start and end time for a given number of days."""
-    now = datetime.now(timezone.utc)
-    start_time = now - timedelta(days=days)
-    return start_time.isoformat()
-
-def _fetch_logs(project_id, days, log_names, filter_conditions=None):
-    """
-    Queries Cloud Logging for specified log names and optional filters.
-    """
-    client = cloud_logging.Client(project=project_id)
-    start_time = _get_time_range(days)
-    
-    log_name_filter = " OR ".join([f'logName="{log}"' for log in log_names])
-    
-    full_filter = f'timestamp >= "{start_time}" AND ({log_name_filter})'
-    if filter_conditions:
-        full_filter += f" AND ({filter_conditions})"
+    if filter_name:
+        unique_vault_jobs = _filter_jobs(unique_vault_jobs, filter_name)
+        unique_appliance_jobs = _filter_jobs(unique_appliance_jobs, filter_name)
         
-    logger.info(f"Querying logs with filter: {full_filter}")
-    
-    entries = []
-    try:
-        for entry in client.list_entries(filter_=full_filter, page_size=1000):
-            entries.append(entry)
-    except Exception as e:
-        logger.error(f"Failed to fetch logs: {e}")
-        # Depending on requirements, you might want to raise here
-        # For this application, we return what we have so one failure doesn't kill all analysis
-    return entries
+    all_unique_jobs = unique_vault_jobs + unique_appliance_jobs
+    successful_jobs = [j for j in all_unique_jobs if j['status'] == 'SUCCESSFUL']
+    failed_jobs = [j for j in all_unique_jobs if j['status'] == 'FAILED']
 
-def _parse_log_entry(entry):
-    """
-    Parses a log entry and returns a standardized dictionary.
-    Returns None if the entry is invalid.
-    """
-    log_name = entry.log_name.split('/')[-1]
-    payload = entry.payload
-    if not payload:
-        return None
+    # Recalculate Aggregates (filtered)
+    agg_total_size_gb = sum(r['total_resource_size_gb'] for r in resource_stats_list)
+    agg_daily_change_gb = sum(r['current_daily_change_gb'] for r in resource_stats_list)
+    agg_daily_change_pct = 0
+    if agg_total_size_gb > 0:
+        agg_daily_change_pct = (agg_daily_change_gb / agg_total_size_gb) * 100
 
-    if log_name == "bdr_backup_restore_jobs":
-        return parse_job_data(entry)
-    elif log_name == "backup_recovery_appliance_events":
-        return parse_appliance_job_data(entry)
-    elif log_name == "gcb_backup_recovery_jobs":
-        return parse_gcb_job_data(entry)
-    return None
-
-def parse_job_data(entry):
-    """
-    Extracts relevant data from a log entry's jsonPayload.
-    Returns a dict with structured data.
-    """
-    payload = entry.payload
-    if not payload:
-        return None
-
-    # Extract fields as per SQL query
-    # Try to find total size for percentage calculation
-    total_size_bytes = 0
-    
-    # Check top-level fields
-    if payload.get('sourceResourceSizeBytes'):
-        total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
-    elif payload.get('usedStorageGib'):
-        total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024 * 1024 * 1024)
-    elif payload.get('sourceResourceDataSizeGib'):
-        total_size_bytes = int(float(payload.get('sourceResourceDataSizeGib')) * 1024 * 1024 * 1024)
-    
-    # Check nested protectedResourceDetails if not found
-    if total_size_bytes == 0:
-        protected_details = payload.get('protectedResourceDetails', {})
-        if protected_details.get('sourceResourceSizeBytes'):
-            total_size_bytes = int(protected_details.get('sourceResourceSizeBytes'))
-        elif protected_details.get('usedStorageGib'):
-            total_size_bytes = int(float(protected_details.get('usedStorageGib')) * 1024 * 1024 * 1024)
-        elif protected_details.get('sourceResourceDataSizeGib'):
-            total_size_bytes = int(float(protected_details.get('sourceResourceDataSizeGib')) * 1024 * 1024 * 1024)
-
-    # Ensure incrementalBackupSizeGib is float
-    inc_size_gib = float(payload.get('incrementalBackupSizeGib', 0))
+    logger.info(f"Analysis complete. Found {len(anomalies)} anomalies.")
 
     return {
-        'jobId': payload.get('jobId'),
-        'jobStatus': payload.get('jobStatus'), # RUNNING, SKIPPED, SUCCESSFUL, FAILED
-        'startTime': payload.get('startTime'),
-        'endTime': payload.get('endTime'),
-        'jobCategory': payload.get('jobCategory'),
-        'resourceType': payload.get('resourceType'),
-        'sourceResourceName': payload.get('sourceResourceName'),
-        'bytes_transferred': int(inc_size_gib * 1024 * 1024 * 1024), # Convert GiB to bytes
-        'total_resource_size_bytes': total_size_bytes,
-        'timestamp': entry.timestamp,
-        'json_payload': payload, # Keep original payload for reference if needed
-        'log_type': 'vault'
+        "summary": {
+            "total_jobs": len(all_unique_jobs),
+            "successful_jobs": len(successful_jobs),
+            "failed_jobs": len(failed_jobs),
+            "anomalies_count": len(anomalies),
+            "total_resource_size_gb": round(agg_total_size_gb, 2),
+            "current_daily_change_gb": round(agg_daily_change_gb, 4),
+            "current_daily_change_pct": round(agg_daily_change_pct, 2)
+        },
+        "vault_workloads": {
+            "total_jobs": len(unique_vault_jobs),
+            "successful_jobs": len([j for j in unique_vault_jobs if j['status'] == 'SUCCESSFUL']),
+            "failed_jobs": len([j for j in unique_vault_jobs if j['status'] == 'FAILED']),
+            "resource_stats": vault_resource_stats
+        },
+        "appliance_workloads": {
+            "total_jobs": len(unique_appliance_jobs),
+            "successful_jobs": len([j for j in unique_appliance_jobs if j['status'] == 'SUCCESSFUL']),
+            "failed_jobs": len([j for j in unique_appliance_jobs if j['status'] == 'FAILED']),
+            "resource_stats": appliance_resource_stats
+        },
+        "anomalies": anomalies
     }
-
-def parse_appliance_job_data(entry):
-    """
-    Extracts relevant data from an appliance log entry (eventId 44003).
-    Returns a dict with structured data.
-    """
-    payload = entry.payload
-    if not payload:
-        return None
-
-    # Mapping fields based on common appliance log structure and assumptions
-    # eventId 44003 implies success
-    
-    # Try to find bytes transferred
-    bytes_transferred = 0
-    if payload.get('dataCopiedInBytes'):
-        bytes_transferred = int(payload.get('dataCopiedInBytes'))
-    elif payload.get('bytesWritten'):
-        bytes_transferred = int(payload.get('bytesWritten'))
-    elif payload.get('transferSize'):
-        bytes_transferred = int(payload.get('transferSize'))
-
-    # Try to find total size
-    total_size_bytes = 0
-    if payload.get('sourceSize'):
-        total_size_bytes = int(payload.get('sourceSize'))
-    elif payload.get('appSize'):
-        total_size_bytes = int(payload.get('appSize'))
-    
-    # Job ID might be jobName or srcid
-    job_id = payload.get('jobName') or payload.get('srcid') or 'unknown_job'
-    
-    return {
-        'jobId': job_id,
-        'jobStatus': 'SUCCESSFUL', # 44003 is success
-        'startTime': payload.get('eventTime') or entry.timestamp.isoformat(), # Use eventTime if available
-        'endTime': payload.get('eventTime') or entry.timestamp.isoformat(), # Point in time event usually
-        'jobCategory': 'ApplianceBackup',
-        'resourceType': payload.get('appType', 'ApplianceWorkload'),
-        'sourceResourceName': payload.get('appName', 'unknown_app'),
-        'bytes_transferred': bytes_transferred,
-        'total_resource_size_bytes': total_size_bytes,
-        'timestamp': entry.timestamp,
-        'json_payload': payload,
-        'log_type': 'appliance'
-    }
-
-def parse_gcb_job_data(entry):
-    """
-    Extracts relevant data from a GCB job log entry.
-    Returns a dict with structured data for enrichment.
-    """
-    payload = entry.payload
-    if not payload:
-        return None
-
-    job_name = payload.get('job_name')
-    
-    total_size_bytes = 0
-    if payload.get('resource_data_size_in_gib'):
-        total_size_bytes = int(float(payload.get('resource_data_size_in_gib')) * 1024**3)
-    elif payload.get('snapshot_disk_size_in_gib'):
-        total_size_bytes = int(float(payload.get('snapshot_disk_size_in_gib')) * 1024**3)
-    elif payload.get('sourceResourceSizeBytes'):
-        total_size_bytes = int(payload.get('sourceResourceSizeBytes'))
-    elif payload.get('usedStorageGib'):
-        total_size_bytes = int(float(payload.get('usedStorageGib')) * 1024**3)
-        
-    bytes_transferred = 0
-    if payload.get('data_copied_in_gib'):
-        bytes_transferred = int(float(payload.get('data_copied_in_gib')) * 1024**3)
-    elif payload.get('onvault_pool_storage_consumed_in_gib'):
-        bytes_transferred = int(float(payload.get('onvault_pool_storage_consumed_in_gib')) * 1024**3)
-
-    return {
-        'jobName': job_name,
-        'total_resource_size_bytes': total_size_bytes,
-        'bytes_transferred': bytes_transferred,
-        'log_type': 'gcb_job'
-    }
-
-def process_jobs(parsed_logs):
-    """
-    Aggregates logs by jobId and determines the final status for vault jobs.
-    """
-    jobs_map = {}
-    status_priority = {"RUNNING": 1, "SKIPPED": 2, "SUCCESSFUL": 3, "FAILED": 4}
-
-    for log in parsed_logs:
-        if not log or not log.get('jobId') or log.get('log_type') != 'vault':
-            continue
-            
-        job_id = log['jobId']
-        status = log.get('jobStatus', 'UNKNOWN')
-        priority = status_priority.get(status, 0)
-        
-        if job_id not in jobs_map:
-            jobs_map[job_id] = {'jobId': job_id, 'max_priority': priority, 'final_status': status, 'logs': [log]}
-        else:
-            jobs_map[job_id]['logs'].append(log)
-            if priority > jobs_map[job_id]['max_priority']:
-                jobs_map[job_id]['max_priority'] = priority
-                jobs_map[job_id]['final_status'] = status
-
-    final_jobs = []
-    for job_id, data in jobs_map.items():
-        final_status = data['final_status']
-        matching_log = next((l for l in data['logs'] if l.get('jobStatus') == final_status), None)
-        
-        if not matching_log:
-            matching_log = sorted(data['logs'], key=lambda x: x['timestamp'], reverse=True)[0]
-            
-        job_data = matching_log.copy()
-        job_data['status'] = final_status
-        job_data['resource_name'] = job_data.get('sourceResourceName', 'unknown')
-        final_jobs.append(job_data)
-        
-    return final_jobs
-
-def _enrich_appliance_jobs(appliance_logs, gcb_jobs_map):
-    """Enriches appliance logs with data from GCB jobs logs."""
-    unique_appliance_jobs = []
-    for job in appliance_logs:
-        if job.get('log_type') != 'appliance':
-            continue
-        job['status'] = 'SUCCESSFUL'
-        job['resource_name'] = job.get('sourceResourceName', 'unknown')
-        
-        job_name = job.get('json_payload', {}).get('jobName')
-        if job_name and job_name in gcb_jobs_map:
-            gcb_data = gcb_jobs_map[job_name]
-            if job.get('total_resource_size_bytes', 0) == 0 and gcb_data.get('total_resource_size_bytes', 0) > 0:
-                job['total_resource_size_bytes'] = gcb_data['total_resource_size_bytes']
-            if job.get('bytes_transferred', 0) == 0 and gcb_data.get('bytes_transferred', 0) > 0:
-                job['bytes_transferred'] = gcb_data['bytes_transferred']
-        
-        unique_appliance_jobs.append(job)
-    return unique_appliance_jobs
-
-def calculate_statistics(job_history):
-    """
-    Computes average change rate and other stats per resource.
-    """
-    stats = {}
-    for job in job_history:
-        resource = job['resource_name']
-        if resource not in stats:
-            stats[resource] = {
-                'bytes_values': [], 
-                'duration_values': [], 
-                'total_size_sum': 0, 
-                'count': 0,
-                'resource_type': job.get('resourceType', 'UNKNOWN')
-            }
-        
-        stats[resource]['bytes_values'].append(job['bytes_transferred'])
-        stats[resource]['duration_values'].append(job.get('duration_seconds', 0))
-        stats[resource]['total_size_sum'] += job.get('total_resource_size_bytes', 0)
-        stats[resource]['count'] += 1
-    
-    results = {}
-    for resource, data in stats.items():
-        count = data['count']
-        if count > 0:
-            avg_bytes = sum(data['bytes_values']) / count
-            avg_total_size = data['total_size_sum'] / count
-            avg_duration = sum(data['duration_values']) / count
-            
-            stdev_bytes = statistics.stdev(data['bytes_values']) if count > 1 else 0
-            stdev_duration = statistics.stdev(data['duration_values']) if count > 1 else 0
-            
-            avg_daily_change_pct = (avg_bytes / avg_total_size) * 100 if avg_total_size > 0 else 0
-                
-            results[resource] = {
-                'avg_bytes': avg_bytes,
-                'stdev_bytes': stdev_bytes,
-                'avg_daily_change_gb': avg_bytes / (1024**3),
-                'avg_daily_change_pct': avg_daily_change_pct,
-                'avg_total_size_gb': avg_total_size / (1024**3),
-                'resource_type': data['resource_type'],
-                'data_points': count,
-                'avg_duration': avg_duration,
-                'stdev_duration': stdev_duration
-            }
-    return results
-
-def detect_anomalies(current_jobs, stats, z_score_threshold=3.0, drop_off_threshold=0.1):
-    """Identifies jobs that are statistical outliers."""
-    anomalies = []
-    for job in current_jobs:
-        resource = job['resource_name']
-        if resource in stats:
-            s = stats[resource]
-            avg_bytes = s['avg_bytes']
-            stdev_bytes = s['stdev_bytes']
-            avg_duration = s['avg_duration']
-            stdev_duration = s['stdev_duration']
-            
-            bytes_transferred = job['bytes_transferred']
-            duration = job.get('duration_seconds', 0)
-            
-            reasons = []
-            
-            if stdev_bytes > 0:
-                z_score_size = (bytes_transferred - avg_bytes) / stdev_bytes
-                if z_score_size > z_score_threshold:
-                    reasons.append(f"Size Spike (Z={z_score_size:.1f})")
-            elif avg_bytes > 0 and bytes_transferred > (avg_bytes * 1.5):
-                reasons.append(f"Size Spike (Factor={bytes_transferred/avg_bytes:.1f}x)")
-
-            if avg_bytes > 100 * 1024 * 1024 and bytes_transferred < (avg_bytes * drop_off_threshold):
-                reasons.append(f"Size Drop-off ({bytes_transferred/avg_bytes*100:.1f}% of avg)")
-
-            if stdev_duration > 0 and avg_duration > 0:
-                z_score_duration = (duration - avg_duration) / stdev_duration
-                if z_score_duration > z_score_threshold:
-                    reasons.append(f"Duration Spike (Z={z_score_duration:.1f})")
-            
-            if reasons:
-                ts = job['timestamp']
-                date_str = ts.strftime('%Y-%m-%d') if isinstance(ts, datetime) else 'unknown'
-                time_str = ts.strftime('%H:%M:%S UTC') if isinstance(ts, datetime) else 'unknown'
-
-                anomalies.append({
-                    'job_id': job['jobId'],
-                    'resource': resource,
-                    'reasons': ", ".join(reasons),
-                    'date': date_str, 'time': time_str,
-                    'gib_transferred': round(bytes_transferred / (1024**3), 4),
-                    'avg_gib': round(avg_bytes / (1024**3), 4),
-                    'duration_seconds': duration,
-                    'avg_duration_seconds': avg_duration
-                })
-    return anomalies
 
 def _filter_jobs(jobs, pattern):
     """Filters a list of jobs based on a name pattern."""
     if not pattern:
         return jobs
     return [j for j in jobs if matches_filter(j.get('resource_name'), pattern)]
-
-def matches_filter(name, pattern):
-    """
-    Checks if name matches the pattern (case-insensitive wildcard or substring).
-    """
-    if not pattern or not name:
-        return True
-    name, pattern = name.lower(), pattern.lower()
-    return fnmatch.fnmatch(name, pattern) or pattern in name
 
 def _get_resource_details(project_id, resource_name, resource_type, cache):
     """Fetches resource details from GCE or CloudSQL if size is missing."""
@@ -1085,57 +775,6 @@ def _calculate_resource_stats(period_stats, project_id, unique_vault_jobs):
         })
     return resource_stats_list
 
-def _generate_summary(all_jobs, successful_jobs, failed_jobs, anomalies, resource_stats):
-    """Generates the final summary dictionary."""
-    agg_total_size_gb = sum(r['total_resource_size_gb'] for r in resource_stats)
-    agg_daily_change_gb = sum(r['current_daily_change_gb'] for r in resource_stats)
-    agg_daily_change_pct = (agg_daily_change_gb / agg_total_size_gb) * 100 if agg_total_size_gb > 0 else 0
-    
-    return {
-        
-    
-    vault_jobs = unique_vault_jobs
-    vault_successful = [j for j in vault_jobs if j['status'] == 'SUCCESSFUL']
-    vault_failed = [j for j in vault_jobs if j['status'] == 'FAILED']
-    
-    # Calculate counts for appliance
-    appliance_jobs = unique_appliance_jobs
-    appliance_successful = [j for j in appliance_jobs if j['status'] == 'SUCCESSFUL']
-    appliance_failed = [j for j in appliance_jobs if j['status'] == 'FAILED']
-    
-    # Calculate aggregate totals
-    agg_total_size_gb = sum(r['total_resource_size_gb'] for r in resource_stats_list)
-    agg_daily_change_gb = sum(r['current_daily_change_gb'] for r in resource_stats_list)
-    agg_daily_change_pct = 0
-    if agg_total_size_gb > 0:
-        agg_daily_change_pct = (agg_daily_change_gb / agg_total_size_gb) * 100
-    
-    logger.info(f"Found {len(anomalies)} anomalies.")
-    
-    return {
-        "summary": {
-            "total_jobs": len(all_unique_jobs),
-            "successful_jobs": len(successful_jobs),
-            "failed_jobs": len(failed_jobs),
-            "anomalies_count": len(anomalies),
-            "total_resource_size_gb": round(agg_total_size_gb, 2),
-            "current_daily_change_gb": round(agg_daily_change_gb, 4),
-            "current_daily_change_pct": round(agg_daily_change_pct, 2)
-        },
-        "vault_workloads": {
-            "total_jobs": len(vault_jobs),
-            "successful_jobs": len(vault_successful),
-            "failed_jobs": len(vault_failed),
-            "resource_stats": vault_resource_stats
-        },
-        "appliance_workloads": {
-            "total_jobs": len(appliance_jobs),
-            "successful_jobs": len(appliance_successful),
-            "failed_jobs": len(appliance_failed),
-            "resource_stats": appliance_resource_stats
-        },
-        "anomalies": anomalies
-    }
 
 def fetch_gce_instance_details(project_id, resource_name):
     """
