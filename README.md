@@ -125,7 +125,7 @@ The tool can alert you via Google Chat or Email when anomalies are detected.
 Set the following environment variables to enable notifications:
 
 **Google Chat:**
-- `GOOGLE_CHAT_WEBHOOK`: The Webhook URL for your Google Chat space.
+- `GOOGLE_CHAT_WEBHOOK`: The full Webhook URL for your Google Chat space (e.g., `https://chat.googleapis.com/v1/spaces/...`).
 
 **Email:**
 - `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
