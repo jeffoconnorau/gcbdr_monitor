@@ -63,8 +63,6 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     ```
     The server will start on `http://0.0.0.0:8080` (or the port specified by `PORT` env var).
 
-    > **Note:** If using the Management Console collector, ensure `MGMT_CONSOLE_ENDPOINT` is set to the base URL **without** trailing paths (e.g., `https://10.20.30.40`). The collector automatically appends `/actifio/api/...`.
-
 3.  **Trigger Analysis:**
     You can trigger the analysis by visiting the root endpoint:
     ```bash
@@ -74,6 +72,14 @@ GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup 
     - `filter_name`: (Optional) Filter resources by name. Supports wildcards (e.g., `*sql*`, `vm-?`) or case-insensitive substring search.
     - `source_type`: (Optional) Filter by backup source. Options: `all` (default), `vault`, `appliance`.
     - `format`: (Optional) Output format. Options: `json` (default), `csv`, `html`.
+
+### Code Structure
+
+- **main.py**: The main Flask application file. It handles routing and request handling.
+- **analyzer.py**: The core logic of the application. It fetches, parses, and analyzes the backup logs.
+- **formatters.py**: Contains functions to format the analysis results into CSV.
+- **notifier.py**: Manages sending notifications via Google Chat, Email, and Pub/Sub.
+- **templates/report.html**: Jinja2 template for the HTML report.
 
 ### Inspecting Logs
 
@@ -100,21 +106,6 @@ The tool automatically detects anomalies in backup jobs using advanced statistic
 
 Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field explaining the cause (e.g., "Size Spike (Z=4.2)", "Size Drop-off").
 
-Example Anomaly Output (JSON):
-```json
-{
-  "job_id": "job-123",
-  "resource": "web-server-1",
-  "date": "2023-10-27",
-  "time": "10:00:00 UTC",
-  "gib_transferred": 50.5,
-  "avg_gib": 10.2,
-  "duration_seconds": 3600,
-  "avg_duration_seconds": 600,
-  "reasons": "Size Spike (Z=4.0), Duration Spike (Z=5.0)"
-}
-```
-
 ### Grafana Dashboard
 
 The repository includes a comprehensive Grafana dashboard (`observer/dashboards/grafana_gcbdr_dashboard.json`) that visualizes the collected metrics.
@@ -135,7 +126,6 @@ Set the following environment variables to enable notifications:
 
 **Google Chat:**
 - `GOOGLE_CHAT_WEBHOOK`: The Webhook URL for your Google Chat space.
-- `GCBDR_MONITOR_SKIP_SSL_VERIFY`: (Optional) Set to `true` to disable SSL certificate verification (useful for internal proxies with custom CAs).
 
 **Email:**
 - `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
@@ -147,240 +137,22 @@ Set the following environment variables to enable notifications:
 
 **Pub/Sub:**
 - `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
-  - The Cloud Run service account must have `roles/pubsub.publisher` on this topic.
 
 You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
 
-#### Troubleshooting Notifications
+### Deploying to Cloud Run
 
-**Email (SMTP) Issues:**
-- **Authentication Failed (535):**
-    - If using Gmail or Outlook with 2FA enabled, you **MUST** use an **App Password**, not your regular login password.
-    - **Special Characters:** If your password contains special characters, ensure they are properly escaped when setting the environment variable in your shell.
-        - *Bad:* `export SMTP_PASSWORD=foo!bar` (bash might interpret `!`)
-        - *Good:* `export SMTP_PASSWORD='foo!bar'` (use single quotes)
-- **Connection Timeout:** Check if your firewall allows outbound traffic on port 587 (or 465/25).
-
-**Google Chat Issues:**
-- **SSL Certificate Verify Failed:**
-    - This often happens behind corporate proxies or firewalls that intercept SSL traffic.
-    - **Fix:** Set `GCBDR_MONITOR_SKIP_SSL_VERIFY=true` to bypass verification (use with caution).
-
-#### Troubleshooting Deployment
-
-**Permission Errors (CLI/Cloud Build):**
-- **Symptom:** `Error 403: ... permission denied` during build or push.
-- **Fix:** Grant the following roles to your **Compute Engine Default Service Account** (which Cloud Build often uses by default) or your specific Cloud Build service account.
-  
-  Replace `[PROJECT_NUMBER]` with your Google Cloud Project Number.
-  ```bash
-  # 1. Grant Log Writer (allows writing build logs)
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/logging.logWriter
-
-  # 2. Grant Artifact Registry Admin (allows creating/pushing attributes)
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/artifactregistry.repoAdmin
-  
-  # 3. Grant Create-on-Push Writer (required for first-time repo creation)
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/artifactregistry.createOnPushWriter
-  ```
-
-**Runtime Errors (Cloud Run):**
-- **Symptom:** `Internal Server Error: 403 Permission denied for all log views`
-- **Fix:** The Cloud Run service account needs permission to *read* logs.
-  ```bash
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/logging.viewer
-  ```
-
-- **Symptom:** `Total Resource Size` is 0GB in Cloud Run (but works locally).
-- **Fix:** The service account needs permission to query Compute Engine and Cloud SQL APIs to look up resource sizes.
-  ```bash
-  # Grant Compute Viewer (for VMs and Disks)
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/compute.viewer
-
-  # Grant Cloud SQL Viewer (for SQL Instances)
-  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-      --member=serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com \
-      --role=roles/cloudsql.viewer
-  ```
-
-**Cloud Run Deployment Errors:**
-- **Symptom:** `Deployment failed ... Retry` or image not found errors.
-- **Cause:** Often due to using a placeholder ID in the image URL (e.g., `gcr.io/your-project-id/...`).
-- **Fix:** Ensure you replace `your-project-id` with your *actual* Project ID.
-  ```bash
-  gcloud run deploy gcbdr-monitor \
-      --image gcr.io/$GOOGLE_CLOUD_PROJECT/gcbdr-monitor \
-      --platform managed \
-      --region asia-southeast1 \
-      --allow-unauthenticated \
-      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT
-  ```
-
-- **Symptom:** `GOOGLE_CLOUD_PROJECT environment variable not set`
-- **Fix:** You must explicitly set this variable (and others) during deployment.
-```
-  gcloud run services update gcbdr-monitor \
-      --set-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT,GOOGLE_CHAT_WEBHOOK='https://chat.googleapis.com/v1/spaces/ABCDE_a1FG/messages?key=examplekey-extended&token=exampletoken-extended' \
-      --region asia-southeast1
-  ```
-  *(Add other variables like `SMTP_HOST`, `SMTP_PASSWORD` etc. to this command using comma separation).*
-
-### Alerting (Cloud Monitoring)
-
-The application automatically logs structured JSON events when anomalies are detected. You can set up a **Log-based Alert Policy** in Google Cloud Monitoring to get notified via Email, SMS, Slack, PagerDuty, etc.
-
-**Log Filter:**
-```
-jsonPayload.event="GCBDR_ANOMALY_DETECTED"
-severity>=WARNING
-```
-
-**To create an alert policy via gcloud:**
-1.  Verify the `alert_policy.json` file in the repository.
-2.  Run the following command (replace `YOUR_CHANNEL_ID` with your actual Notification Channel ID, e.g., `projects/YOUR_PROJECT/notificationChannels/12345`).
-    *   *Tip: List channels with `gcloud beta monitoring channels list`*
-
-```bash
-gcloud alpha monitoring policies create \
-  --policy-from-file=alert_policy.json \
-  --notification-channels="YOUR_CHANNEL_ID"
-```
-
-### Output Structure
-
-The analysis returns a JSON object with the following structure:
-
-```json
-{
-  "summary": {
-    "anomalies_count": 6,
-    "current_daily_change_gb": 179.5601,
-    "current_daily_change_pct": 7.17,
-    "failed_jobs": 3,
-    "successful_jobs": 491,
-    "total_jobs": 494,
-    "total_resource_size_gb": 2505.24
-  },
-  "vault_workloads": {
-    "total_jobs": 50,
-    "successful_jobs": 49,
-    "failed_jobs": 1,
-    "resource_stats": [ ... ]
-  },
-  "appliance_workloads": {
-    "total_jobs": 50,
-    "successful_jobs": 49,
-    "failed_jobs": 1,
-    "resource_stats": [ ... ]
-  },
-  "anomalies": [
-    {
-      "avg_bytes": 590558002.75,
-      "avg_duration_seconds": 0.0,
-      "avg_gib": 0.55,
-      "bytes": 42949672,
-      "date": "2025-12-08",
-      "duration_seconds": 0,
-      "gib_transferred": 0.04,
-      "job_id": "Job_19742479",
-      "reasons": "Size Drop-off (7.3% of avg)",
-      "resource": "FERHATDB",
-      "resource_type": "Oracle",
-      "time": "06:03:24 UTC",
-      "total_resource_size_gb": 164.71
-    },
-    {
-      "avg_bytes": 1836098519.0,
-      "avg_duration_seconds": 0.0,
-      "avg_gib": 1.71,
-      "bytes": 7097433456,
-      "date": "2025-12-08",
-      "duration_seconds": 0,
-      "gib_transferred": 6.61,
-      "job_id": "Job_19729093",
-      "reasons": "Size Spike (Factor=3.9x)",
-      "resource": "winsql22-01",
-      "resource_type": "VMBackup",
-      "time": "06:39:24 UTC",
-      "total_resource_size_gb": 62.12
-    }
-  ]
-}
-```
-
-## Observer Module (Visual Dashboard)
-
-The **Observer** is a dedicated sidecar module that provides long-term visual monitoring and historical analysis using **InfluxDB** and **Grafana**. Unlike the stateless API, the Observer maintains a persistent history (default 90 days) to track trends and anomalies over time.
-
-### Features
-- **Unified Dashboard**: View Native GCBDR and Management Console jobs in a single pane.
-- **Historical Trends**: Track job duration, data size, and failure rates over 90 days.
-- **Anomaly Detection**: Visual panels highlighting jobs behaving strangely (Duration > 2 stddev, etc.).
-- **Top Talkers**: Identify which resources are churning the most data.
-- **Job Restoration Tracking**: Dedicated tracking for `RESTORE` and `RECOVERY` activities.
-
-### Quick Start (Docker)
-
-The Observer is designed to run locally or on a VM using Docker Compose.
-
-1.  **Navigate to the observer directory:**
-    ```bash
-    cd observer
-    ```
-
-2.  **Configure Credentials:**
-    - Ensure you have a Google Cloud Service Account Key (JSON) with `roles/logging.viewer`.
-    - Save it as `gcp_creds.json` in the `observer/` directory (or export `GOOGLE_APPLICATION_CREDENTIALS` path).
-
-3.  **Start the Stack:**
-    ```bash
-    docker compose up --build -d
-    ```
-    *This starts the Python Collector, InfluxDB, and Grafana.*
-
-4.  **Access the Dashboard:**
-    - **Grafana**: [http://localhost:3000](http://localhost:3000)
-    - **Credentials**: `admin` / `admin` (default)
-    - **Data Source**: Pre-configured to talk to the local InfluxDB.
-
-### Dashboard Architecture
-- **Collector (`src/`)**: A Python service that polls:
-    - **Native GCBDR**: Via Google Cloud Logging API (`bdr_backup_recovery_jobs`).
-    - **Management Console**: Via Actifio API (`/api/v1/jobs`).
-- **InfluxDB**: Time-series database storing metrics with tags (Status, JobType, ResourceType).
-- **Grafana**: Visualizes the data with pre-built dashboards (JSON provisioned).
-
-## Deploying to Cloud Run
-
-1.  **Setup Artifact Registry & Region:**
-    - We will use `asia-southeast1` (Singapore) for this deployment.
-    - Ensure you have an Artifact Registry repository or use the default GCR if enabled.
-    - *Tip:* You can configure your default region globally:
-      ```bash
-      gcloud config set run/region asia-southeast1
-      ```
-
-2.  **Build the Container:**
+1.  **Build the Container:**
     ```bash
     gcloud builds submit --tag gcr.io/your-project-id/gcbdr-monitor
     ```
 
-3.  **Deploy:**
+2.  **Deploy:**
     ```bash
     gcloud run deploy gcbdr-monitor \
       --image gcr.io/your-project-id/gcbdr-monitor \
       --platform managed \
-      --region asia-southeast1 \
+      --region your-region \
       --allow-unauthenticated
     ```
 

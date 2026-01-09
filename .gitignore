@@ -7,3 +7,4 @@ env/
 venv/
 .env
 .DS_Store
+gcp_creds.json

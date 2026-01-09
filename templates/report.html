@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GCBDR Monitor Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .summary { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .warning { background-color: #fff3cd; color: #856404; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .anomaly-table th { background-color: #d32f2f; }
+        .anomaly-row { background-color: #ffebee !important; }
+    </style>
+</head>
+<body>
+    <h1>GCBDR Monitor Report</h1>
+
+    {% if show_permission_warning %}
+    <div class="warning">
+        <strong>⚠️ Potential Permission Issue Detected</strong><br>
+        {{ zero_size_vault_count }} out of {{ total_vault_count }} ({{ (zero_size_pct * 100)|round(1) }}%) Vault resources are showing 0GB size.<br>
+        Please check that the Cloud Run service account has been granted sufficient rights (e.g. <code>Compute Viewer</code> or <code>Cloud SQL Viewer</code>) to the source project(s) to allow size lookup.
+    </div>
+    {% endif %}
+    
+    <div class="summary">
+        <h2>Summary</h2>
+        <p><strong>Total Jobs:</strong> {{ summary.total_jobs }}</p>
+        <p><strong>Successful:</strong> {{ summary.successful_jobs }}</p>
+        <p><strong>Failed:</strong> {{ summary.failed_jobs }}</p>
+        <p><strong>Anomalies:</strong> {{ summary.anomalies_count }}</p>
+        <p><strong>Total Size:</strong> {{ summary.total_resource_size_gb }} GiB</p>
+        <p><strong>Total Daily Change:</strong> {{ summary.current_daily_change_gb }} GB ({{ summary.current_daily_change_pct }}%)</p>
+    </div>
+    
+    {% if anomalies %}
+    <h2>Anomalies Detected</h2>
+    <table class="anomaly-table">
+        <tr>
+            <th>Job ID</th>
+            <th>Resource</th>
+            <th>Date</th>
+            <th>Change (GB)</th>
+            <th>Avg (GB)</th>
+            <th>Duration (s)</th>
+            <th>Reasons</th>
+        </tr>
+    {% for a in anomalies %}
+        <tr class="anomaly-row">
+            <td>{{ a.job_id }}</td>
+            <td>{{ a.resource }}</td>
+            <td>{{ a.date }} {{ a.time }}</td>
+            <td>{{ a.gib_transferred }}</td>
+            <td>{{ a.avg_gib }}</td>
+            <td>{{ a.duration_seconds }}</td>
+            <td>{{ a.reasons }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+    
+    <h2>Resources</h2>
+    <table>
+        <tr>
+            <th>Resource Name</th>
+            <th>Type</th>
+            <th>Source</th>
+            <th>Total Size (GiB)</th>
+            <th>Daily Change (GB)</th>
+            <th>Daily Change (%)</th>
+            <th>Job Count</th>
+        </tr>
+    {% for r in all_stats %}
+        <tr>
+            <td>{{ r.resource_name }}</td>
+            <td>{{ r.resource_type }}</td>
+            <td>{{ r.job_source }}</td>
+            <td>{{ r.total_resource_size_gb }}</td>
+            <td>{{ r.current_daily_change_gb }}</td>
+            <td>{{ r.current_daily_change_pct }}</td>
+            <td>{{ r.backup_job_count }}</td>
+        </tr>
+    {% endfor %}
+    </table>
+</body>
+</html>

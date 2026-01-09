@@ -3,5 +3,5 @@ flask
 gunicorn
 pytest
 google-cloud-compute
-google-api-python-client>=2.129.0
+google-api-python-client==2.129.0
 google-cloud-pubsub

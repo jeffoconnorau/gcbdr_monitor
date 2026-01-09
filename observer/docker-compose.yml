@@ -7,17 +7,16 @@ services:
       - INFLUXDB_TOKEN=my-super-secret-auth-token
       - INFLUXDB_ORG=my-org
       - INFLUXDB_BUCKET=gcbdr
-      - INFLUXDB_BUCKET=gcbdr
       - POLL_INTERVAL_SECONDS=60
       - INITIAL_HISTORY_MINUTES=129600 # Fetch last 90 days on startup
-      # Mock credentials for local testing
       - GCBDR_MOCK_MODE=false
-      # Pass-through variables from .env or host
       - GOOGLE_CLOUD_PROJECT
-      - GOOGLE_APPLICATION_CREDENTIALS
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/nonroot/app/gcp_creds.json
       - MGMT_CONSOLE_ENDPOINT
     depends_on:
       - influxdb
+    volumes:
+      - ./gcp_creds.json:/home/nonroot/app/gcp_creds.json:ro
 
   influxdb:
     image: influxdb:2.7

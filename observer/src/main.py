@@ -53,39 +53,40 @@ class GCBDRMonitor:
     def run(self):
         self.register_signal_handlers()
         logger.info(f"Starting GCBDR Monitor. Poll Interval: {Config.POLL_INTERVAL_SECONDS}s")
-        
-        while self.running:
-            start_time = time.time()
-            
-            all_metrics = []
-            
-            # Collect in parallel if we have many collectors, but sequential is fine for now
-            for collector in self.collectors:
-                try:
-                    logger.info(f"Collecting from {collector.name}...")
-                    metrics = collector.collect()
-                    all_metrics.extend(metrics)
-                    logger.info(f"Collected {len(metrics)} metrics from {collector.name}")
-                except Exception as e:
-                    logger.error(f"Error collecting from {collector.name}: {e}", exc_info=True)
-            
-            # Export
-            if all_metrics:
-                try:
-                    self.exporter.export(all_metrics)
-                    logger.info(f"Exported {len(all_metrics)} metrics")
-                except Exception as e:
-                    logger.error(f"Error exporting metrics: {e}", exc_info=True)
-            
-            # Sleep
-            if Config.SINGLE_RUN:
-                logger.info("Single run mode enabled. Exiting.")
-                self.running = False
-                break
 
-            elapsed = time.time() - start_time
-            sleep_time = max(0, Config.POLL_INTERVAL_SECONDS - elapsed)
-            time.sleep(sleep_time)
+        with ThreadPoolExecutor(max_workers=len(self.collectors) or 1) as executor:
+            while self.running:
+                start_time = time.time()
+                
+                all_metrics = []
+                future_to_collector = {executor.submit(c.collect): c for c in self.collectors}
+                
+                for future in future_to_collector:
+                    collector = future_to_collector[future]
+                    try:
+                        metrics = future.result()
+                        all_metrics.extend(metrics)
+                        logger.info(f"Collected {len(metrics)} metrics from {collector.name}")
+                    except Exception as exc:
+                        logger.error(f"Error collecting from {collector.name}: {exc}", exc_info=True)
+
+                # Export
+                if all_metrics:
+                    try:
+                        self.exporter.export(all_metrics)
+                        logger.info(f"Exported {len(all_metrics)} metrics")
+                    except Exception as e:
+                        logger.error(f"Error exporting metrics: {e}", exc_info=True)
+                
+                # Sleep
+                if Config.SINGLE_RUN:
+                    logger.info("Single run mode enabled. Exiting.")
+                    self.running = False
+                    break
+
+                elapsed = time.time() - start_time
+                sleep_time = max(0, Config.POLL_INTERVAL_SECONDS - elapsed)
+                time.sleep(sleep_time)
 
 if __name__ == "__main__":
     monitor = GCBDRMonitor()
