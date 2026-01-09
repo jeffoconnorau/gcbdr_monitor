@@ -106,6 +106,24 @@ The tool automatically detects anomalies in backup jobs using advanced statistic
 
 Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field explaining the cause (e.g., "Size Spike (Z=4.2)", "Size Drop-off").
 
+You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
+
+### Deploying to Cloud Run
+
+1.  **Build the Container:**
+    ```bash
+    gcloud builds submit --tag gcr.io/your-project-id/gcbdr-monitor
+    ```
+
+2.  **Deploy:**
+    ```bash
+    gcloud run deploy gcbdr-monitor \
+      --image gcr.io/your-project-id/gcbdr-monitor \
+      --platform managed \
+      --region your-region \
+      --allow-unauthenticated
+    ```
+
 ### Observer Module (Visual Dashboard)
 
 The **Observer Module** provides a comprehensive visual dashboard using Grafana to track long-term trends and historical data.
@@ -143,23 +161,9 @@ Set the following environment variables to enable notifications:
 **Pub/Sub:**
 - `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
 
-You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
 
-### Deploying to Cloud Run
 
-1.  **Build the Container:**
-    ```bash
-    gcloud builds submit --tag gcr.io/your-project-id/gcbdr-monitor
-    ```
 
-2.  **Deploy:**
-    ```bash
-    gcloud run deploy gcbdr-monitor \
-      --image gcr.io/your-project-id/gcbdr-monitor \
-      --platform managed \
-      --region your-region \
-      --allow-unauthenticated
-    ```
 
 ## License
 
