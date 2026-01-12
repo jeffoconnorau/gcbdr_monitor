@@ -271,7 +271,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "displayName": "${__field.labels.source_resource}",
+
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
@@ -994,6 +994,7 @@
         }
       ]
     },
+
     {
       "datasource": {
         "type": "influxdb",
@@ -1018,8 +1019,7 @@
                 "value": null
               }
             ]
-          },
-          "unit": "dthms"
+          }
         },
         "overrides": []
       },
@@ -1042,7 +1042,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "title": "Top 10 Anomalies (Duration)",
+      "title": "Top 10 Anomalies",
       "type": "table",
       "targets": [
         {
@@ -1050,7 +1050,7 @@
             "type": "influxdb",
             "uid": "${datasource}"
           },
-          "query": "import \"math\"\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\")\n  |> map(fn: (r) => ({ r with _value: \n      if r._measurement == \"mgmt_console_job\" and float(v: r._value) > 10000000.0 then float(v: r._value) / 1000000.0 \n      else float(v: r._value) \n  }))\n  |> group(columns: [\"source_resource\"])\n\nstats = data\n  |> mean()\n  |> set(key: \"_field\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"_field\", value: \"stddev\")\n\nstats_joined = join(tables: {mean: stats, stddev: stddev}, on: [\"source_resource\"])\n\njoin(tables: {limit: stats_joined, original: data}, on: [\"source_resource\"])\n  |> filter(fn: (r) => r[\"_value\"] > (r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])))\n  |> map(fn: (r) => ({ \n      _time: r[\"_time\"],\n      source_resource: r[\"source_resource\"],\n      duration: r[\"_value\"],\n      mean: r[\"_value_mean\"],\n      limit: r[\"_value_mean\"] + (2.0 * r[\"_value_stddev\"])\n  }))\n  |> group()\n  |> sort(columns: [\"duration\"], desc: true)\n  |> limit(n: 10)",
+          "query": "import \"strings\"\nimport \"math\"\n\n// 1. Fetch Data (Duration and Size)\ndata = from(bucket: \"gcbdr\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mgmt_console_job\" or r[\"_measurement\"] == \"gcbdr_log_event\")\n  |> filter(fn: (r) => r[\"_field\"] == \"duration\" or r[\"_field\"] == \"size_bytes\")\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) }))\n  |> group(columns: [\"source_resource\", \"_field\"])\n\n// 2. Calculate Stats\nstats = data\n  |> mean()\n  |> set(key: \"stat\", value: \"mean\")\n\nstddev = data\n  |> stddev()\n  |> set(key: \"stat\", value: \"stddev\")\n\n// 3. Join Stats\njoined_stats = join(tables: {mean: stats, stddev: stddev}, on: [\"source_resource\", \"_field\"])\n\n// 4. Join Data with Stats and Detect\nresults = join(tables: {data: data, stats: joined_stats}, on: [\"source_resource\", \"_field\"])\n  |> map(fn: (r) => ({\n      r with\n      z_score: if r._value_stddev > 0.0 then (r._value - r._value_mean) / r._value_stddev else 0.0,\n      pct_of_avg: if r._value_mean > 0.0 then (r._value / r._value_mean) * 100.0 else 0.0\n  }))\n  |> filter(fn: (r) => \n      (r[\"_field\"] == \"duration\" and r[\"z_score\"] > 3.0) or \n      (r[\"_field\"] == \"size_bytes\" and r[\"z_score\"] > 3.0) or \n      (r[\"_field\"] == \"size_bytes\" and r[\"pct_of_avg\"] < 10.0 and r[\"_value_mean\"] > 1073741824.0) // Drop-off < 10% and avg > 1GB (noise filter)\n  )\n  |> map(fn: (r) => ({\n      _time: r._time,\n      source_resource: r.source_resource,\n      value: r._value,\n      mean: r._value_mean,\n      reason: \n        if r[\"_field\"] == \"duration\" then \n            \"Duration Spike (\" + string(v: int(v: r._value)) + \"s vs avg \" + string(v: int(v: r._value_mean)) + \"s)\" \n        else if r[\"_field\"] == \"size_bytes\" and r[\"z_score\"] > 3.0 then\n            \"Size Spike (\" + string(v: int(v: r._value / 1073741824.0)) + \"GB vs avg \" + string(v: int(v: r._value_mean / 1073741824.0)) + \"GB)\"\n        else\n            \"Size Drop-off (\" + string(v: int(v: r.pct_of_avg)) + \"% of avg)\"\n  }))\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 10)\n\nresults",
           "refId": "A"
         }
       ]
