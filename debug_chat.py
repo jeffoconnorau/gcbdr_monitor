@@ -26,9 +26,23 @@ def test_chat_auth():
     try:
         # 1. Get Credentials
         print("1. Acquiring Application Default Credentials (ADC)...")
-        creds, project = google.auth.default(scopes=['https://www.googleapis.com/auth/chat.bot'])
+        # Try Bot scope first, but if acting as user, we might need 'chat.messages'. 
+        # Actually, for User Auth, 'chat.bot' is invalid. 
+        # Let's request both if possible, or try one then the other?
+        # A simple way is to use a broader scope list or handle the error.
+        # But 'chat.bot' is for Service Accounts. 'chat.messages' is for Users.
+        
+        scopes = ['https://www.googleapis.com/auth/chat.bot']
+        
+        # Check if we should try User scope (simple toggle for now)
+        if os.environ.get('USE_USER_SCOPE'):
+             print("   [INFO] USE_USER_SCOPE set. Switching to 'chat.messages' scope.")
+             scopes = ['https://www.googleapis.com/auth/chat.messages']
+        
+        creds, project = google.auth.default(scopes=scopes)
         print(f"   Success! Project: {project}")
         print(f"   Service Account: {creds.service_account_email if hasattr(creds, 'service_account_email') else 'Unknown (User account?)'}")
+        print(f"   Scopes: {scopes}")
 
         # 2. Refresh Token
         print("2. Refreshing access token...")
@@ -40,7 +54,7 @@ def test_chat_auth():
         print("3. Sending test message to Chat API...")
         url = f"https://chat.googleapis.com/v1/{space_name}/messages"
         
-        # Simple text payload
+        # Simple text payload (Works for both Bot and User)
         payload = {"text": "Hello! This is a test message from the GCBDR Monitor debugger."}
         
         req = urllib.request.Request(
