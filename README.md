@@ -120,6 +120,11 @@ Set the following environment variables to enable notifications:
     - **Option 1 (Space ID)**: Just the Space ID (e.g., `AAAA...`) or Resource Name (`spaces/AAAA...`). Requires the Service Account to have permissions in the Google Chat Space.
     - **Option 2 (Webhook)**: The full Webhook URL (e.g., `https://chat.googleapis.com/v1/spaces/...`).
 
+    > [!NOTE] 
+    > **Local Testing**: If you are testing locally with your User Account, you should use **Option 2 (Webhook)**. 
+    > The "Space ID" method requires the `chat.bot` scope (only available to Service Accounts) or the `chat.messages` scope (often blocked by Organization Policies for user accounts).
+
+
 **Email:**
 - `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
 - `SMTP_PORT`: Port (default: 587).
