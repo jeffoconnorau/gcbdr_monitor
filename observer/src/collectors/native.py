@@ -198,6 +198,7 @@ class NativeGCBDRCollector(BaseCollector):
                 f' (logName:"bdr_backup_restore_jobs") OR '
                 f' (logName:"backup_recovery_appliance_events" AND jsonPayload.eventId="44003")'
                 f')' # Removed NOT jsonPayload.jobStatus="RUNNING" to allow tracking active jobs
+            )
 
             entries = self.client.list_entries(filter_=filter_str, page_size=100)
             
