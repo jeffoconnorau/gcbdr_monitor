@@ -15,22 +15,24 @@ def test_chat_auth():
         print("Error: Please set GOOGLE_CHAT_SPACE_ID environment variable.")
         return
 
+    # Detect Mode
+    if space_id.startswith('http'):
+        print(f"Detected Webhook URL mode.")
+        test_webhook(space_id)
+        return
+
     # Normalize Space ID
     if not space_id.startswith('spaces/'):
         space_name = f"spaces/{space_id}"
     else:
         space_name = space_id
 
-    print(f"Testing auth for Space: {space_name}")
+    print(f"Testing auth for Space: {space_name} (API Mode)")
 
     try:
         # 1. Get Credentials
         print("1. Acquiring Application Default Credentials (ADC)...")
         # Try Bot scope first, but if acting as user, we might need 'chat.messages'. 
-        # Actually, for User Auth, 'chat.bot' is invalid. 
-        # Let's request both if possible, or try one then the other?
-        # A simple way is to use a broader scope list or handle the error.
-        # But 'chat.bot' is for Service Accounts. 'chat.messages' is for Users.
         
         scopes = ['https://www.googleapis.com/auth/chat.bot']
         
@@ -54,8 +56,8 @@ def test_chat_auth():
         print("3. Sending test message to Chat API...")
         url = f"https://chat.googleapis.com/v1/{space_name}/messages"
         
-        # Simple text payload (Works for both Bot and User)
-        payload = {"text": "Hello! This is a test message from the GCBDR Monitor debugger."}
+        # Simple text payload
+        payload = {"text": "Hello! This is a test message from the GCBDR Monitor debugger (API Mode)."}
         
         req = urllib.request.Request(
             url,
@@ -72,6 +74,22 @@ def test_chat_auth():
 
     except Exception as e:
         print(f"\n❌ FAILED: {e}")
+
+def test_webhook(url):
+    print("Testing Webhook...")
+    try:
+        payload = {"text": "Hello! This is a test message from the GCBDR Monitor debugger (Webhook Mode)."}
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with urllib.request.urlopen(req) as response:
+            print(f"   Success! HTTP Status: {response.status}")
+            print(f"   Response: {response.read().decode('utf-8')}")
+    except Exception as e:
+         print(f"\n❌ FAILED: {e}")
         if "403" in str(e):
             print("\nPossible Causes for 403 Forbidden:")
             print("1. The Service Account is NOT explicitly added to the Chat Space.")
