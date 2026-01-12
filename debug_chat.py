@@ -89,7 +89,7 @@ def test_webhook(url):
             print(f"   Success! HTTP Status: {response.status}")
             print(f"   Response: {response.read().decode('utf-8')}")
     except Exception as e:
-         print(f"\n❌ FAILED: {e}")
+        print(f"\n❌ FAILED: {e}")
         if "403" in str(e):
             print("\nPossible Causes for 403 Forbidden:")
             print("1. The Service Account is NOT explicitly added to the Chat Space.")
