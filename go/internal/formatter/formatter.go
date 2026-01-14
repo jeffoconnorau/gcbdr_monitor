@@ -68,6 +68,7 @@ func FormatCSV(result *analyzer.AnalysisResult) ([]byte, error) {
 const htmlTemplate = `<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>GCBDR Monitor Report</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }

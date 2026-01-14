@@ -102,7 +102,7 @@ func handleAnalysis(w http.ResponseWriter, r *http.Request) {
 		contentType = "text/csv"
 	case "html":
 		output, err = formatter.FormatHTML(result)
-		contentType = "text/html"
+		contentType = "text/html; charset=utf-8"
 	default:
 		output, err = formatter.FormatJSON(result)
 		contentType = "application/json"
