@@ -74,10 +74,22 @@ func handleAnalysis(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse workload projects for cross-project lookups
+	var workloadProjects []string
+	if wp := os.Getenv("WORKLOAD_PROJECTS"); wp != "" {
+		workloadProjects = strings.Split(wp, ",")
+		for i := range workloadProjects {
+			workloadProjects[i] = strings.TrimSpace(workloadProjects[i])
+		}
+	}
+
 	log.Printf("Starting GCBDR analysis v%s for project %s with %d days history", Version, projectID, days)
+	if len(workloadProjects) > 0 {
+		log.Printf("Configured %d workload projects for fallback lookups: %v", len(workloadProjects), workloadProjects)
+	}
 
 	// Create analyzer
-	a, err := analyzer.New(projectID, days)
+	a, err := analyzer.New(projectID, days, workloadProjects)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create analyzer: %v", err), http.StatusInternalServerError)
 		return
