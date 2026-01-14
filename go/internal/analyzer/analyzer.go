@@ -551,19 +551,7 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, days int) []Da
 	globalSeenResources := make(map[string]bool)
 
 	// Iterate through dates in chronological order
-	// We go back 'days' from now
-	start := time.Now().AddDate(0, 0, -days)
-	for i := 0; i <= days; i++ {
-		date := start.AddDate(0, 0, i).Format("2006-01-02")
-		daysJobs := jobsByDate[date]
 
-		if len(daysJobs) == 0 {
-			// Even if no jobs, we might want an entry? Python skips if no data properly or fills 0.
-			// Let's create an entry with 0s if it's within our range, or just skip if map empty?
-			// Python loops sorted(unique_dates). Let's do that.
-			continue
-		}
-	}
 
 	// Actually, let's just iterate over the dates present in the data, sorted.
 	var sortedDates []string
