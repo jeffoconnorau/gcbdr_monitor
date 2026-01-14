@@ -45,5 +45,22 @@ def format_csv(results):
                 f"{a.get('avg_duration_seconds', 0):.1f}",
                 a.get('reasons')
             ])
+    
+    # Daily Baselines Section
+    daily_baselines = results.get('daily_baselines', [])
+    if daily_baselines:
+        writer.writerow([])
+        writer.writerow(['DAILY BASELINE METRICS'])
+        writer.writerow(['Date', 'Modified (GB)', 'New (GB)', 'Deleted (GB)', 'Suspicious (GB)', 'Total Protected (GB)', 'Resource Count'])
+        for b in daily_baselines:
+            writer.writerow([
+                b.get('date'),
+                b.get('modified_data_gb'),
+                b.get('new_data_gb'),
+                b.get('deleted_data_gb'),
+                b.get('suspicious_data_gb'),
+                b.get('total_protected_gb'),
+                b.get('resource_count')
+            ])
         
     return output.getvalue()

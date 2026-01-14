@@ -460,6 +460,112 @@ def detect_anomalies(current_jobs, stats, z_score_threshold=3.0, drop_off_thresh
                 })
     return anomalies
 
+def calculate_daily_baseline(jobs, anomalies, days):
+    """
+    Calculates daily baseline metrics for charting.
+    
+    Returns a list of daily baselines with:
+    - modified_data_gb: Total bytes transferred for the day
+    - new_data_gb: Size of newly seen resources (compared to first day)
+    - deleted_data_gb: Size of resources no longer seen (compared to previous days)
+    - suspicious_data_gb: Sum of bytes_transferred for anomaly jobs
+    - total_protected_gb: Sum of all unique resource sizes for the day
+    """
+    from collections import defaultdict
+    
+    # Group jobs by date
+    jobs_by_date = defaultdict(list)
+    for job in jobs:
+        ts = job['timestamp']
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+            except ValueError:
+                continue
+        date_str = ts.strftime('%Y-%m-%d')
+        jobs_by_date[date_str].append(job)
+    
+    # Create anomaly lookup by job_id
+    anomaly_job_ids = set()
+    for a in anomalies:
+        if isinstance(a, dict):
+            anomaly_job_ids.add(a.get('job_id'))
+    
+    # Sort dates to get first day for "new" resource detection
+    sorted_dates = sorted(jobs_by_date.keys())
+    if not sorted_dates:
+        return []
+    
+    # Track resources seen on first day (baseline)
+    first_day = sorted_dates[0]
+    first_day_resources = set()
+    first_day_resource_sizes = {}
+    for job in jobs_by_date[first_day]:
+        res = job.get('resource_name')
+        if res:
+            first_day_resources.add(res)
+            first_day_resource_sizes[res] = job.get('total_resource_size_bytes', 0)
+    
+    # Track all resources seen so far for "deleted" detection
+    all_seen_resources = set(first_day_resources)
+    all_resource_sizes = dict(first_day_resource_sizes)
+    
+    baselines = []
+    
+    for date_str in sorted_dates:
+        day_jobs = jobs_by_date[date_str]
+        
+        # Resources active today
+        today_resources = set()
+        today_resource_sizes = {}
+        for job in day_jobs:
+            res = job.get('resource_name')
+            if res:
+                today_resources.add(res)
+                # Keep the largest size seen for this resource
+                size = job.get('total_resource_size_bytes', 0)
+                if res not in today_resource_sizes or size > today_resource_sizes[res]:
+                    today_resource_sizes[res] = size
+                    all_resource_sizes[res] = max(all_resource_sizes.get(res, 0), size)
+        
+        # 1. Modified Data: Sum of bytes_transferred
+        modified_bytes = sum(job.get('bytes_transferred', 0) for job in day_jobs)
+        
+        # 2. New Data: Resources appearing for first time (not in first_day_resources)
+        new_resources = today_resources - first_day_resources
+        new_bytes = sum(today_resource_sizes.get(r, 0) for r in new_resources)
+        
+        # 3. Deleted Data: Resources seen before but not today
+        deleted_resources = all_seen_resources - today_resources
+        deleted_bytes = sum(all_resource_sizes.get(r, 0) for r in deleted_resources)
+        
+        # 4. Suspicious Data: Sum of bytes_transferred for anomaly jobs
+        suspicious_bytes = sum(
+            job.get('bytes_transferred', 0) 
+            for job in day_jobs 
+            if job.get('jobId') in anomaly_job_ids
+        )
+        
+        # 5. Total Protected: Sum of all unique resource sizes today
+        total_protected_bytes = sum(today_resource_sizes.values())
+        
+        baselines.append({
+            'date': date_str,
+            'modified_data_gb': round(modified_bytes / (1024**3), 4),
+            'new_data_gb': round(new_bytes / (1024**3), 4),
+            'deleted_data_gb': round(deleted_bytes / (1024**3), 4),
+            'suspicious_data_gb': round(suspicious_bytes / (1024**3), 4),
+            'total_protected_gb': round(total_protected_bytes / (1024**3), 2),
+            'resource_count': len(today_resources),
+            'new_resource_count': len(new_resources),
+            'deleted_resource_count': len(deleted_resources)
+        })
+        
+        # Update tracking for next iteration
+        all_seen_resources = all_seen_resources | today_resources
+    
+    return baselines
+
 def matches_filter(name, pattern):
     """
     Checks if name matches the pattern.
@@ -698,6 +804,10 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all')
 
     logger.info(f"Analysis complete. Found {len(anomalies)} anomalies.")
 
+    # Calculate daily baseline metrics for charting
+    daily_baselines = calculate_daily_baseline(successful_jobs, anomalies, days)
+    logger.info(f"Calculated {len(daily_baselines)} daily baseline records.")
+
     return {
         "summary": {
             "total_jobs": len(all_unique_jobs),
@@ -720,7 +830,8 @@ def analyze_backup_jobs(project_id, days=7, filter_name=None, source_type='all')
             "failed_jobs": len([j for j in unique_appliance_jobs if j['status'] == 'FAILED']),
             "resource_stats": appliance_resource_stats
         },
-        "anomalies": anomalies
+        "anomalies": anomalies,
+        "daily_baselines": daily_baselines
     }
 
 def _filter_jobs(jobs, pattern):

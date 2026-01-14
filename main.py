@@ -58,6 +58,7 @@ def index():
                                    summary=results.get('summary', {}),
                                    anomalies=anomalies,
                                    all_stats=all_stats,
+                                   daily_baselines=results.get('daily_baselines', []),
                                    show_permission_warning=show_permission_warning,
                                    zero_size_vault_count=zero_size_vault_count,
                                    total_vault_count=total_vault_count,

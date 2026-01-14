@@ -85,5 +85,31 @@
         </tr>
     {% endfor %}
     </table>
+    
+    {% if daily_baselines %}
+    <h2>Daily Baseline Metrics</h2>
+    <table class="baseline-table">
+        <tr>
+            <th>Date</th>
+            <th>Modified (GB)</th>
+            <th>New (GB)</th>
+            <th>Deleted (GB)</th>
+            <th>Suspicious (GB)</th>
+            <th>Total Protected (GB)</th>
+            <th>Resources</th>
+        </tr>
+    {% for b in daily_baselines %}
+        <tr>
+            <td>{{ b.date }}</td>
+            <td>{{ b.modified_data_gb }}</td>
+            <td style="color: {% if b.new_data_gb > 0 %}green{% else %}inherit{% endif %};">{{ b.new_data_gb }}</td>
+            <td style="color: {% if b.deleted_data_gb > 0 %}red{% else %}inherit{% endif %};">{{ b.deleted_data_gb }}</td>
+            <td style="color: {% if b.suspicious_data_gb > 0 %}orange{% else %}inherit{% endif %};">{{ b.suspicious_data_gb }}</td>
+            <td>{{ b.total_protected_gb }}</td>
+            <td>{{ b.resource_count }}{% if b.new_resource_count > 0 %} <span style="color:green;">(+{{ b.new_resource_count }})</span>{% endif %}{% if b.deleted_resource_count > 0 %} <span style="color:red;">(-{{ b.deleted_resource_count }})</span>{% endif %}</td>
+        </tr>
+    {% endfor %}
+    </table>
+    {% endif %}
 </body>
 </html>
