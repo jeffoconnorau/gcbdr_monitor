@@ -62,9 +62,15 @@ func handleAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	shouldNotify := r.URL.Query().Get("notify") != "false"
 
-	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	projectID := r.URL.Query().Get("project_id")
 	if projectID == "" {
-		http.Error(w, "GOOGLE_CLOUD_PROJECT environment variable not set", http.StatusInternalServerError)
+		projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
+	}
+	
+	if projectID == "" {
+		msg := "Project ID not set. Use GOOGLE_CLOUD_PROJECT env var or ?project_id= param."
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 

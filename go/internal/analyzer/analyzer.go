@@ -20,15 +20,16 @@ import (
 
 // JobData represents a parsed backup job.
 type JobData struct {
-	JobID           string
-	ResourceName    string
-	ResourceType    string
-	Status          string
-	StartTime       time.Time
-	EndTime         time.Time
-	GiBTransferred  float64
-	DurationSeconds float64
-	JobSource       string // "vault" or "appliance"
+	JobID                  string
+	ResourceName           string
+	ResourceType           string
+	Status                 string
+	StartTime              time.Time
+	EndTime                time.Time
+	GiBTransferred         float64
+	DurationSeconds        float64
+	TotalResourceSizeBytes int64
+	JobSource              string // "vault" or "appliance"
 }
 
 // ResourceStats holds aggregated statistics for a resource.
@@ -61,10 +62,10 @@ type Anomaly struct {
 
 // AnalysisResult is the output of the analysis.
 type AnalysisResult struct {
-	Summary            Summary         `json:"summary"`
-	VaultWorkloads     WorkloadResult  `json:"vault_workloads"`
-	ApplianceWorkloads WorkloadResult  `json:"appliance_workloads"`
-	Anomalies          []Anomaly       `json:"anomalies"`
+	Summary            Summary        `json:"summary"`
+	VaultWorkloads     WorkloadResult `json:"vault_workloads"`
+	ApplianceWorkloads WorkloadResult `json:"appliance_workloads"`
+	Anomalies          []Anomaly      `json:"anomalies"`
 }
 
 // Summary provides high-level stats.
@@ -119,7 +120,7 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 			stats := calculateStatistics(filtered, a.Days)
 			result.VaultWorkloads.ResourceStats = stats
 			result.Summary.TotalVaultJobs = len(filtered)
-			
+
 			// Detect anomalies
 			anomalies := detectAnomalies(filtered, stats)
 			result.Anomalies = append(result.Anomalies, anomalies...)
@@ -136,7 +137,7 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 			stats := calculateStatistics(filtered, a.Days)
 			result.ApplianceWorkloads.ResourceStats = stats
 			result.Summary.TotalApplianceJobs = len(filtered)
-			
+
 			// Detect anomalies
 			anomalies := detectAnomalies(filtered, stats)
 			result.Anomalies = append(result.Anomalies, anomalies...)
@@ -169,7 +170,7 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 	var jobs []JobData
 	log.Printf("DEBUG: Querying logs with filter: %s", filter)
 	it := a.client.Entries(ctx, logadmin.Filter(filter))
-	
+
 	for {
 		entry, err := it.Next()
 		if err == iterator.Done {
@@ -178,18 +179,23 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate logs: %w", err)
 		}
-		
+
 		job := parseLogEntry(entry, source)
 		if job != nil {
 			jobs = append(jobs, *job)
 		}
 	}
-	
+
 	log.Printf("Fetched %d %s jobs", len(jobs), source)
 	return jobs, nil
 }
 
 func parseLogEntry(entry *logging.Entry, source string) *JobData {
+	if entry.Payload == nil {
+		log.Printf("Debug: Entry payload is nil for %s", source)
+		return nil
+	}
+
 	var payload map[string]interface{}
 
 	switch p := entry.Payload.(type) {
@@ -198,15 +204,19 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 	case *structpb.Struct:
 		payload = p.AsMap()
 	default:
-		log.Printf("Warning: Unexpected payload type: %T", entry.Payload)
+		log.Printf("Debug: Payload is not map[string]interface{} or structpb, it is %T for %s", entry.Payload, source)
 		return nil
 	}
-	
+
+	// Debug log for the first few entries to verify structure
+	// This is noisy but helpful for debugging the user's issue
+	// log.Printf("Debug: Processing payload keys: %v", getKeys(payload))
+
 	job := &JobData{
 		JobSource: source,
 		StartTime: entry.Timestamp,
 	}
-	
+
 	// Generic/Vault fields
 	if id, ok := payload["jobId"].(string); ok {
 		job.JobID = id
@@ -224,89 +234,123 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		job.GiBTransferred = gib
 	}
 
-    // Appliance specific overrides
-    if source == "appliance" {
-        // Job ID
-        if name, ok := payload["jobName"].(string); ok {
-            job.JobID = name
-        } else if srcid, ok := payload["srcid"].(string); ok {
-            job.JobID = srcid
-        }
+	// Appliance specific overrides
+	if source == "appliance" {
+		// Job ID
+		if name, ok := payload["jobName"].(string); ok {
+			job.JobID = name
+		} else if srcid, ok := payload["srcid"].(string); ok {
+			job.JobID = srcid
+		}
 
-        // Resource Name
-        if appName, ok := payload["appName"].(string); ok {
-            job.ResourceName = appName
-        }
+		// Resource Name
+		if appName, ok := payload["appName"].(string); ok {
+			job.ResourceName = appName
+		}
 
-        // Resource Type
-        if appType, ok := payload["appType"].(string); ok {
-            job.ResourceType = appType
-        }
+		// Resource Type
+		if appType, ok := payload["appType"].(string); ok {
+			job.ResourceType = appType
+		}
 
-        // Status (44003 is success)
-        job.Status = "SUCCESSFUL"
+		// Status (44003 is success)
+		job.Status = "SUCCESSFUL"
 
-        // Bytes Transferred (convert to GiB)
-        var bytes float64
-        foundBytes := false
-        
-        // Helper to get float from map
-        getFloat := func(key string) (float64, bool) {
-            if v, ok := payload[key].(float64); ok {
-                return v, true
-            }
-            if v, ok := payload[key].(string); ok {
-                 // Try parsing string as float
-                 var f float64
-                 if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
-                     return f, true
-                 }
-            }
-            return 0, false
-        }
+		// Bytes Transferred (convert to GiB)
+		var bytes float64
+		foundBytes := false
 
-        if v, ok := getFloat("dataCopiedInBytes"); ok {
-            bytes = v
-            foundBytes = true
-        } else if v, ok := getFloat("bytesWritten"); ok {
-            bytes = v
-            foundBytes = true
-        } else if v, ok := getFloat("transferSize"); ok {
-            bytes = v
-            foundBytes = true
-        }
+		// Helper to get float from map
+		getFloat := func(key string) (float64, bool) {
+			if v, ok := payload[key].(float64); ok {
+				return v, true
+			}
+			if v, ok := payload[key].(string); ok {
+				// Try parsing string as float
+				var f float64
+				if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+					return f, true
+				}
+			}
+			return 0, false
+		}
 
-        if foundBytes {
-            job.GiBTransferred = bytes / (1024 * 1024 * 1024)
-        }
-    }
-	
-    // Calculate duration from start/end times if available
-    var startTime, endTime time.Time
-    if st, ok := payload["startTime"].(string); ok {
-        startTime, _ = time.Parse(time.RFC3339, st)
-    } else if et, ok := payload["eventTime"].(string); ok {
-         // Appliance logs use eventTime
-         startTime, _ = time.Parse(time.RFC3339, et)
-    }
+		if v, ok := getFloat("dataCopiedInBytes"); ok {
+			bytes = v
+			foundBytes = true
+		} else if v, ok := getFloat("bytesWritten"); ok {
+			bytes = v
+			foundBytes = true
+		} else if v, ok := getFloat("transferSize"); ok {
+			bytes = v
+			foundBytes = true
+		}
 
-    if et, ok := payload["endTime"].(string); ok {
-        endTime, _ = time.Parse(time.RFC3339, et)
-    } else if et, ok := payload["eventTime"].(string); ok {
-         endTime, _ = time.Parse(time.RFC3339, et)
-    }
-    
-    if !startTime.IsZero() && !endTime.IsZero() {
-        job.DurationSeconds = endTime.Sub(startTime).Seconds()
-    } else if duration, ok := payload["durationSeconds"].(float64); ok {
+		if foundBytes {
+			job.GiBTransferred = bytes / (1024 * 1024 * 1024)
+		}
+	}
+
+	// Calculate duration from start/end times if available
+	var startTime, endTime time.Time
+	if st, ok := payload["startTime"].(string); ok {
+		startTime, _ = time.Parse(time.RFC3339, st)
+	} else if et, ok := payload["eventTime"].(string); ok {
+		// Appliance logs use eventTime
+		startTime, _ = time.Parse(time.RFC3339, et)
+	}
+
+	if et, ok := payload["endTime"].(string); ok {
+		endTime, _ = time.Parse(time.RFC3339, et)
+	} else if et, ok := payload["eventTime"].(string); ok {
+		endTime, _ = time.Parse(time.RFC3339, et)
+	}
+
+	if !startTime.IsZero() && !endTime.IsZero() {
+		job.DurationSeconds = endTime.Sub(startTime).Seconds()
+	} else if duration, ok := payload["durationSeconds"].(float64); ok {
 		job.DurationSeconds = duration
-    } 
-    
+	}
 
-    
-    // Debug first few parsed jobs
+	// Extract total resource size (logic matches Python analyzer.py)
+	var totalBytes int64
 
+	// Helper to get int64 or valid float64 as int64
+	getAsInt64 := func(v interface{}) int64 {
+		switch i := v.(type) {
+		case float64:
+			return int64(i)
+		case string:
+			// parse string if needed, but logs usually have numbers
+			return 0
+		default:
+			return 0
+		}
+	}
 
+	// 1. Check top-level fields
+	if v, ok := payload["sourceResourceSizeBytes"]; ok {
+		totalBytes = getAsInt64(v)
+	} else if v, ok := payload["usedStorageGib"]; ok {
+		totalBytes = int64(getAsInt64(v) * 1024 * 1024 * 1024)
+	} else if v, ok := payload["sourceResourceDataSizeGib"]; ok {
+		totalBytes = int64(getAsInt64(v) * 1024 * 1024 * 1024)
+	}
+
+	// 2. Check nested protectedResourceDetails if not found
+	if totalBytes == 0 {
+		if details, ok := payload["protectedResourceDetails"].(map[string]interface{}); ok {
+			if v, ok := details["sourceResourceSizeBytes"]; ok {
+				totalBytes = getAsInt64(v)
+			} else if v, ok := details["usedStorageGib"]; ok {
+				totalBytes = int64(getAsInt64(v) * 1024 * 1024 * 1024)
+			} else if v, ok := details["sourceResourceDataSizeGib"]; ok {
+				totalBytes = int64(getAsInt64(v) * 1024 * 1024 * 1024)
+			}
+		}
+	}
+
+	job.TotalResourceSizeBytes = totalBytes
 	return job
 }
 
@@ -314,13 +358,13 @@ func filterJobs(jobs []JobData, pattern string) []JobData {
 	if pattern == "" {
 		return jobs
 	}
-	
+
 	var filtered []JobData
 	pattern = strings.ToLower(pattern)
-	
+
 	// Check if pattern contains wildcards
 	hasWildcard := strings.ContainsAny(pattern, "*?")
-	
+
 	for _, job := range jobs {
 		name := strings.ToLower(job.ResourceName)
 		if hasWildcard {
@@ -349,22 +393,27 @@ func calculateStatistics(jobs []JobData, days int) []ResourceStats {
 	for _, job := range jobs {
 		byResource[job.ResourceName] = append(byResource[job.ResourceName], job)
 	}
-	
+
 	var stats []ResourceStats
 	for name, rjobs := range byResource {
 		if len(rjobs) == 0 {
 			continue
 		}
-		
+
 		// Calculate averages
 		var totalGiB, totalDuration float64
+		var maxTotalBytes int64
+
 		for _, j := range rjobs {
 			totalGiB += j.GiBTransferred
 			totalDuration += j.DurationSeconds
+			if j.TotalResourceSizeBytes > maxTotalBytes {
+				maxTotalBytes = j.TotalResourceSizeBytes
+			}
 		}
 		avgGiB := totalGiB / float64(len(rjobs))
 		avgDuration := totalDuration / float64(len(rjobs))
-		
+
 		// Calculate standard deviations
 		var sumSqGiB, sumSqDuration float64
 		for _, j := range rjobs {
@@ -373,15 +422,26 @@ func calculateStatistics(jobs []JobData, days int) []ResourceStats {
 		}
 		stdDevGiB := math.Sqrt(sumSqGiB / float64(len(rjobs)))
 		stdDevDuration := math.Sqrt(sumSqDuration / float64(len(rjobs)))
-		
+
 		// Daily change rate
 		dailyChangeGB := (totalGiB * 1.073741824) / float64(days) // GiB to GB
-		
+
+		// Total Resource Size in GiB
+		totalResourceSizeGB := float64(maxTotalBytes) / (1024 * 1024 * 1024)
+
+		// Percent change
+		var dailyChangePct float64
+		if totalResourceSizeGB > 0 {
+			dailyChangePct = (dailyChangeGB / totalResourceSizeGB) * 100
+		}
+
 		stats = append(stats, ResourceStats{
 			ResourceName:          name,
 			ResourceType:          rjobs[0].ResourceType,
 			JobSource:             rjobs[0].JobSource,
+			TotalResourceSizeGB:   totalResourceSizeGB,
 			CurrentDailyChangeGB:  dailyChangeGB,
+			CurrentDailyChangePct: dailyChangePct,
 			BackupJobCount:        len(rjobs),
 			AvgGiB:                avgGiB,
 			StdDevGiB:             stdDevGiB,
@@ -389,34 +449,34 @@ func calculateStatistics(jobs []JobData, days int) []ResourceStats {
 			StdDevDuration:        stdDevDuration,
 		})
 	}
-	
+
 	// Sort by resource name
 	sort.Slice(stats, func(i, j int) bool {
 		return stats[i].ResourceName < stats[j].ResourceName
 	})
-	
+
 	return stats
 }
 
 func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 	const zScoreThreshold = 3.0
 	const dropOffThreshold = 0.1
-	
+
 	// Create stats lookup
 	statsMap := make(map[string]ResourceStats)
 	for _, s := range stats {
 		statsMap[s.ResourceName] = s
 	}
-	
+
 	var anomalies []Anomaly
 	for _, job := range jobs {
 		s, ok := statsMap[job.ResourceName]
 		if !ok {
 			continue
 		}
-		
+
 		var reasons []string
-		
+
 		// Size spike (Z-score)
 		if s.StdDevGiB > 0 {
 			zScore := (job.GiBTransferred - s.AvgGiB) / s.StdDevGiB
@@ -424,12 +484,12 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 				reasons = append(reasons, fmt.Sprintf("Size Spike (Z=%.1f)", zScore))
 			}
 		}
-		
+
 		// Size drop-off
 		if s.AvgGiB > 1.0 && job.GiBTransferred < s.AvgGiB*dropOffThreshold {
 			reasons = append(reasons, "Size Drop-off")
 		}
-		
+
 		// Duration spike
 		if s.StdDevDuration > 0 {
 			durationZ := (job.DurationSeconds - s.AvgDurationSeconds) / s.StdDevDuration
@@ -437,7 +497,7 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 				reasons = append(reasons, fmt.Sprintf("Duration Spike (Z=%.1f)", durationZ))
 			}
 		}
-		
+
 		if len(reasons) > 0 {
 			anomalies = append(anomalies, Anomaly{
 				JobID:              job.JobID,
@@ -452,7 +512,7 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 			})
 		}
 	}
-	
+
 	return anomalies
 }
 
