@@ -24,6 +24,42 @@ GCBDR Monitor calculates change rates and detects anomalies in Google Cloud Back
   - `roles/compute.viewer` (Fetch disk sizes)
   - **Cloud SQL Admin API** enabled (Fetch SQL instance sizes)
 
+### Authentication
+
+The application uses **Application Default Credentials (ADC)**. Choose one of the following methods:
+
+#### Option 1: Local Development (User Account)
+```bash
+# Login with your Google account
+gcloud auth application-default login
+
+# Set your project
+export GOOGLE_CLOUD_PROJECT="your-project-id"
+```
+
+#### Option 2: Service Account (Production / Cloud Run)
+```bash
+# Create a service account
+gcloud iam service-accounts create gcbdr-monitor \
+    --display-name="GCBDR Monitor Service Account"
+
+# Grant required roles
+gcloud projects add-iam-policy-binding your-project-id \
+    --member="serviceAccount:gcbdr-monitor@your-project-id.iam.gserviceaccount.com" \
+    --role="roles/logging.viewer"
+
+gcloud projects add-iam-policy-binding your-project-id \
+    --member="serviceAccount:gcbdr-monitor@your-project-id.iam.gserviceaccount.com" \
+    --role="roles/compute.viewer"
+
+# For local testing with a service account key (optional)
+gcloud iam service-accounts keys create key.json \
+    --iam-account=gcbdr-monitor@your-project-id.iam.gserviceaccount.com
+export GOOGLE_APPLICATION_CREDENTIALS="key.json"
+```
+
+> **Note**: On Cloud Run, the service automatically uses the attached service account—no key file needed.
+
 ### Installation
 
 1.  **Authenticate Locally** (if not using Cloud Shell or Service Account):
@@ -92,13 +128,24 @@ See [observer/README.md](observer/README.md) for setup instructions.
 
 ## Troubleshooting
 
+### Authentication Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `google.auth.exceptions.DefaultCredentialsError` | No credentials configured | Run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` |
+| `403 Forbidden` / `Permission denied` | Missing IAM roles | Grant `roles/logging.viewer` and `roles/compute.viewer` to user/service account |
+| `Could not automatically determine credentials` | ADC not set up | Run `gcloud auth application-default login` |
+| `Request had insufficient authentication scopes` | Token missing required scopes | Re-run `gcloud auth application-default login` or use a service account |
+
 ### Common Issues
 - **"No data found"**:
   - Verify `GOOGLE_CLOUD_PROJECT` is set correctly.
   - Ensure backups exist within the requested `days` range.
+  - Check that your account has access to the project's logs.
 - **Permission Errors**:
   - Service Account needs `roles/logging.viewer` and `roles/compute.viewer`.
   - **Local Development**: Run `gcloud auth application-default login` to authenticate with your user credentials. Ensure your user has the necessary IAM roles on the project.
+  - For cross-project monitoring, grant roles in each source project.
 
 ### Debugging
 If report data seems incorrect, use the log inspector to verify raw availability:
