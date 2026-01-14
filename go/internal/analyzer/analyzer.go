@@ -210,37 +210,44 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 	if id, ok := payload["jobId"].(string); ok {
 		job.JobID = id
 	}
-	if name, ok := payload["resourceName"].(string); ok {
+	if name, ok := payload["sourceResourceName"].(string); ok {
 		job.ResourceName = name
 	}
 	if rtype, ok := payload["resourceType"].(string); ok {
 		job.ResourceType = rtype
 	}
-	if status, ok := payload["status"].(string); ok {
+	if status, ok := payload["jobStatus"].(string); ok {
 		job.Status = status
 	}
-	if gib, ok := payload["dataCopiedGiB"].(float64); ok {
+	if gib, ok := payload["incrementalBackupSizeGib"].(float64); ok {
 		job.GiBTransferred = gib
-	} else {
-        // Debug logging for missing/wrong type
-        if job.JobSource == "vault" && job.GiBTransferred == 0 {
-             // Only log occasionally or first one
-             // log.Printf("DEBUG: Missing dataCopiedGiB for %s. Keys: %v", job.JobID, reflect.ValueOf(payload).MapKeys())
-        }
-    }
-	if duration, ok := payload["durationSeconds"].(float64); ok {
-		job.DurationSeconds = duration
 	}
+	
+    // Calculate duration from start/end times if available
+    var startTime, endTime time.Time
+    if st, ok := payload["startTime"].(string); ok {
+        startTime, _ = time.Parse(time.RFC3339, st)
+    }
+    if et, ok := payload["endTime"].(string); ok {
+        endTime, _ = time.Parse(time.RFC3339, et)
+    }
+    
+    if !startTime.IsZero() && !endTime.IsZero() {
+        job.DurationSeconds = endTime.Sub(startTime).Seconds()
+    } else if duration, ok := payload["durationSeconds"].(float64); ok {
+		job.DurationSeconds = duration
+    } 
+    
+    // Debug logging for parsed values
+    /*
+    if len(job.JobID) > 0 {
+        log.Printf("DEBUG: Parsed Job %s: Name=%s, Status=%s, GiB=%.2f, Dur=%.2f", 
+            job.JobID, job.ResourceName, job.Status, job.GiBTransferred, job.DurationSeconds)
+    }
+    */
     
     // Debug first few parsed jobs
-    if len(job.JobID) > 0 && (job.GiBTransferred > 0 || job.DurationSeconds > 0) {
-        // Good job
-    } else if len(job.JobID) > 0 {
-        // Log potential parse failure for non-empty job
-        log.Printf("DEBUG: Parsed Job %s (%s): GiB=%.2f, Dur=%.2f. Keys found: dataCopiedGiB=%v, durationSeconds=%v", 
-            job.JobID, source, job.GiBTransferred, job.DurationSeconds, 
-            payload["dataCopiedGiB"] != nil, payload["durationSeconds"] != nil)
-    }
+
 
 	return job
 }
