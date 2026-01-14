@@ -16,6 +16,12 @@ import (
 	"cloud.google.com/go/logging/logadmin"
 	"google.golang.org/api/iterator"
 	"google.golang.org/protobuf/types/known/structpb"
+    "google.golang.org/protobuf/proto"
+
+    compute "cloud.google.com/go/compute/apiv1"
+    computepb "cloud.google.com/go/compute/apiv1/computepb"
+    sqladmin "google.golang.org/api/sqladmin/v1"
+    "google.golang.org/api/option"
 )
 
 // JobData represents a parsed backup job.
@@ -129,7 +135,7 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	if sourceType == "all" || sourceType == "vault" {
 		if jobs, err := a.fetchAndParseVaultLogs(ctx); err == nil {
 			allVaultJobs = filterJobs(jobs, filterName)
-			stats := calculateStatistics(allVaultJobs, a.Days)
+			stats := calculateStatistics(allVaultJobs, a.Days, a.ProjectID)
 			result.VaultWorkloads.ResourceStats = stats
 			result.Summary.TotalVaultJobs = len(allVaultJobs)
 			anomalies := detectAnomalies(allVaultJobs, stats)
@@ -398,12 +404,22 @@ func matchWildcard(pattern, s string) (bool, error) {
 	return regexp.MatchString(regexPattern, s)
 }
 
-func calculateStatistics(jobs []JobData, days int) []ResourceStats {
+	return stats
+}
+
+// Enable enrichment
+// We need the project ID for fetching details.
+// Modifying signature to accept projectID
+func calculateStatistics(jobs []JobData, days int, projectID string) []ResourceStats {
 	// Group by resource
 	byResource := make(map[string][]JobData)
 	for _, job := range jobs {
 		byResource[job.ResourceName] = append(byResource[job.ResourceName], job)
 	}
+
+    ctx := context.Background()
+    // Cache for enrichment to avoid repetitive calls
+    enrichmentCache := make(map[string]int64)
 
 	var stats []ResourceStats
 	for name, rjobs := range byResource {
@@ -422,6 +438,29 @@ func calculateStatistics(jobs []JobData, days int) []ResourceStats {
 				maxTotalBytes = j.TotalResourceSizeBytes
 			}
 		}
+        
+        // Enrichment: If maxTotalBytes is 0, try to fetch from API
+        if maxTotalBytes == 0 {
+            resourceType := strings.ToLower(rjobs[0].ResourceType)
+            if val, ok := enrichmentCache[name]; ok {
+                maxTotalBytes = val
+            } else {
+                var sizeBytes int64
+                if strings.Contains(resourceType, "gce") || strings.Contains(resourceType, "compute") || strings.Contains(resourceType, "vm") {
+                    sizeBytes = fetchGCEInstanceDetails(ctx, projectID, name)
+                } else if strings.Contains(resourceType, "disk") {
+                    sizeBytes = fetchGCEDiskDetails(ctx, projectID, name)
+                } else if strings.Contains(resourceType, "sql") {
+                    sizeBytes = fetchCloudSQLDetails(ctx, projectID, name)
+                }
+                
+                if sizeBytes > 0 {
+                    maxTotalBytes = sizeBytes
+                    enrichmentCache[name] = sizeBytes
+                }
+            }
+        }
+        
 		avgGiB := totalGiB / float64(len(rjobs))
 		avgDuration := totalDuration / float64(len(rjobs))
 
@@ -625,7 +664,163 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, days int) []Da
 	return baselines
 }
 
-// GetProjectID returns the project ID from environment.
+// Helper to fetch GCE Instance Details
+func fetchGCEInstanceDetails(ctx context.Context, projectID, resourceName string) int64 {
+    // Regex to extract project, zone, instance
+    // matches: projects/{project}/zones/{zone}/instances/{instance}
+    re := regexp.MustCompile(`projects/([^/]+)/zones/([^/]+)/instances/([^/]+)`)
+    
+    targetProject := projectID
+    var targetZone, instanceName string
+    
+    if match := re.FindStringSubmatch(resourceName); match != nil {
+        targetProject = match[1]
+        targetZone = match[2]
+        instanceName = match[3]
+    } else {
+        // Fallback: try to find just project/instance or just instance
+        // Assuming resourceName might just be instance name if parsing failed
+        instanceName = resourceName
+        if strings.Contains(resourceName, "/") {
+             parts := strings.Split(resourceName, "/")
+             instanceName = parts[len(parts)-1]
+        }
+    }
+    
+    log.Printf("DEBUG: Fetching GCE details for %s (Proj=%s, Zone=%s)", instanceName, targetProject, targetZone)
+
+    c, err := compute.NewInstancesClient(ctx)
+    if err != nil {
+        log.Printf("WARN: Failed to create instances client: %v", err)
+        return 0
+    }
+    defer c.Close()
+    
+    // If zone is known, try direct get
+    if targetZone != "" {
+        req := &computepb.GetInstanceRequest{
+            Project: targetProject,
+            Zone:    targetZone,
+            Instance: instanceName,
+        }
+        resp, err := c.Get(ctx, req)
+        if err == nil {
+            return calculateDiskSize(resp)
+        }
+    }
+    
+    // Fallback to AggregatedList if zone unknown or direct get failed
+    req := &computepb.AggregatedListInstancesRequest{
+        Project: targetProject,
+        Filter:  proto.String(fmt.Sprintf("name = %s", instanceName)),
+    }
+    
+    it := c.AggregatedList(ctx, req)
+    for {
+        pair, err := it.Next()
+        if err == iterator.Done {
+            break
+        }
+        if err != nil {
+            log.Printf("WARN: Error listing instances: %v", err)
+            break
+        }
+        if pair.Value.Instances != nil {
+            for _, instance := range pair.Value.Instances {
+                if instance.GetName() == instanceName {
+                    return calculateDiskSize(instance)
+                }
+            }
+        }
+    }
+    
+    return 0
+}
+
+func calculateDiskSize(instance *computepb.Instance) int64 {
+    var totalGB int64
+    for _, disk := range instance.Disks {
+        totalGB += disk.GetDiskSizeGb()
+    }
+    return totalGB * 1024 * 1024 * 1024 // Return bytes
+}
+
+// Helper for Persistent Disks
+func fetchGCEDiskDetails(ctx context.Context, projectID, resourceName string) int64 {
+    // projects/{project}/zones/{zone}/disks/{disk}
+    re := regexp.MustCompile(`projects/([^/]+)/zones/([^/]+)/disks/([^/]+)`)
+    
+    targetProject := projectID
+    var targetZone, diskName string
+    
+    if match := re.FindStringSubmatch(resourceName); match != nil {
+        targetProject = match[1]
+        targetZone = match[2]
+        diskName = match[3]
+    } else {
+        return 0
+    }
+    
+    c, err := compute.NewDisksClient(ctx)
+    if err != nil {
+        log.Printf("WARN: Failed to create disks client: %v", err)
+        return 0
+    }
+    defer c.Close()
+    
+    req := &computepb.GetDiskRequest{
+        Project: targetProject,
+        Zone:    targetZone,
+        Disk:    diskName,
+    }
+    
+    resp, err := c.Get(ctx, req)
+    if err != nil {
+        log.Printf("WARN: Failed to get disk %s: %v", diskName, err)
+        return 0
+    }
+    
+    return resp.GetSizeGb() * 1024 * 1024 * 1024
+}
+
+// Helper for CloudSQL
+func fetchCloudSQLDetails(ctx context.Context, projectID, resourceName string) int64 {
+    // projects/{project}/instances/{instance}
+    re := regexp.MustCompile(`projects/([^/]+)/instances/([^/]+)`)
+    
+    targetProject := projectID
+    var instanceName string
+    
+    if match := re.FindStringSubmatch(resourceName); match != nil {
+        targetProject = match[1]
+        instanceName = match[2]
+    } else {
+        instanceName = resourceName
+        if strings.Contains(resourceName, "/") {
+            parts := strings.Split(resourceName, "/")
+            instanceName = parts[len(parts)-1]
+        }
+    }
+    
+    s, err := sqladmin.NewService(ctx, option.WithScopes(sqladmin.SqlserviceAdminScope))
+    if err != nil {
+        log.Printf("WARN: Failed to create sql service: %v", err)
+        return 0
+    }
+    
+    resp, err := s.Instances.Get(targetProject, instanceName).Do()
+    if err != nil {
+        log.Printf("WARN: Failed to get sql instance %s: %v", instanceName, err)
+        return 0
+    }
+    
+    if resp.Settings != nil && resp.Settings.DataDiskSizeGb > 0 {
+        return resp.Settings.DataDiskSizeGb * 1024 * 1024 * 1024
+    }
+    
+    return 0
+}
+
 func GetProjectID() string {
 	return os.Getenv("GOOGLE_CLOUD_PROJECT")
 }
