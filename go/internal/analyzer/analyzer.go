@@ -35,6 +35,7 @@ type JobData struct {
 	GiBTransferred         float64
 	DurationSeconds        float64
 	TotalResourceSizeBytes int64
+    ProjectID              string
 	JobSource              string // "vault" or "appliance"
 }
 
@@ -234,6 +235,22 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		JobSource: source,
 		StartTime: entry.Timestamp,
 	}
+
+    // Attempt to extract project ID from Resource labels
+    if entry.Resource != nil && entry.Resource.Labels != nil {
+        if p, ok := entry.Resource.Labels["project_id"]; ok {
+            job.ProjectID = p
+        }
+    }
+    // Fallback: extract from LogName (projects/PROJECT_ID/logs/...)
+    if job.ProjectID == "" && entry.LogName != "" {
+        parts := strings.Split(entry.LogName, "/")
+        if len(parts) > 1 && parts[0] == "projects" {
+            job.ProjectID = parts[1]
+        }
+    }
+
+
 
 	// Generic/Vault fields
 	if id, ok := payload["jobId"].(string); ok {
@@ -442,16 +459,26 @@ func calculateStatistics(jobs []JobData, days int, projectID string) []ResourceS
         // Enrichment: If maxTotalBytes is 0, try to fetch from API
         if maxTotalBytes == 0 {
             resourceType := strings.ToLower(rjobs[0].ResourceType)
+            
+            // Determine project ID to use (prefer from job, fallback to global)
+            useProjectID := projectID
+            if rjobs[0].ProjectID != "" {
+                useProjectID = rjobs[0].ProjectID
+            }
+
             if val, ok := enrichmentCache[name]; ok {
                 maxTotalBytes = val
             } else {
                 var sizeBytes int64
                 if strings.Contains(resourceType, "gce") || strings.Contains(resourceType, "compute") || strings.Contains(resourceType, "vm") {
-                    sizeBytes = fetchGCEInstanceDetails(ctx, projectID, name)
+                    sizeBytes = fetchGCEInstanceDetails(ctx, useProjectID, name)
                 } else if strings.Contains(resourceType, "disk") {
-                    sizeBytes = fetchGCEDiskDetails(ctx, projectID, name)
+                    sizeBytes = fetchGCEDiskDetails(ctx, useProjectID, name)
+                } else if strings.Contains(resourceType, "cloud sql") {
+                    sizeBytes = fetchCloudSQLDetails(ctx, useProjectID, name)
                 } else if strings.Contains(resourceType, "sql") {
-                    sizeBytes = fetchCloudSQLDetails(ctx, projectID, name)
+                    // "SQL Server" usually refers to GCE VMs running SQL
+                    sizeBytes = fetchGCEInstanceDetails(ctx, useProjectID, name)
                 }
                 
                 if sizeBytes > 0 {
@@ -710,6 +737,11 @@ func fetchGCEInstanceDetails(ctx context.Context, projectID, resourceName string
     }
     
     // Fallback to AggregatedList if zone unknown or direct get failed
+    // Only attempt if we have a reasonable project ID (not empty)
+    if targetProject == "" {
+        return 0
+    }
+
     req := &computepb.AggregatedListInstancesRequest{
         Project: targetProject,
         Filter:  proto.String(fmt.Sprintf("name = %s", instanceName)),
@@ -722,7 +754,8 @@ func fetchGCEInstanceDetails(ctx context.Context, projectID, resourceName string
             break
         }
         if err != nil {
-            log.Printf("WARN: Error listing instances: %v", err)
+            // Permission denied or other errors are common if checking wrong project
+            log.Printf("WARN: Error listing instances for %s in %s: %v", instanceName, targetProject, err)
             break
         }
         if pair.Value.Instances != nil {
