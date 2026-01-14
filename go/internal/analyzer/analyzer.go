@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
     "google.golang.org/protobuf/proto"
 
-    compute "cloud.google.com/go/compute/apiv1"
+    compute_v1 "cloud.google.com/go/compute/apiv1"
     computepb "cloud.google.com/go/compute/apiv1/computepb"
     sqladmin "google.golang.org/api/sqladmin/v1"
     "google.golang.org/api/option"
@@ -148,7 +148,8 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	if sourceType == "all" || sourceType == "appliance" {
 		if jobs, err := a.fetchAndParseApplianceLogs(ctx); err == nil {
 			allApplianceJobs = filterJobs(jobs, filterName)
-			stats := calculateStatistics(allApplianceJobs, a.Days)
+			// Calculate stats
+			stats := calculateStatistics(allApplianceJobs, a.Days, a.ProjectID)
 			result.ApplianceWorkloads.ResourceStats = stats
 			result.Summary.TotalApplianceJobs = len(allApplianceJobs)
 			anomalies := detectAnomalies(allApplianceJobs, stats)
@@ -404,8 +405,7 @@ func matchWildcard(pattern, s string) (bool, error) {
 	return regexp.MatchString(regexPattern, s)
 }
 
-	return stats
-}
+
 
 // Enable enrichment
 // We need the project ID for fetching details.
@@ -689,7 +689,7 @@ func fetchGCEInstanceDetails(ctx context.Context, projectID, resourceName string
     
     log.Printf("DEBUG: Fetching GCE details for %s (Proj=%s, Zone=%s)", instanceName, targetProject, targetZone)
 
-    c, err := compute.NewInstancesClient(ctx)
+    c, err := compute_v1.NewInstancesRESTClient(ctx)
     if err != nil {
         log.Printf("WARN: Failed to create instances client: %v", err)
         return 0
@@ -761,7 +761,7 @@ func fetchGCEDiskDetails(ctx context.Context, projectID, resourceName string) in
         return 0
     }
     
-    c, err := compute.NewDisksClient(ctx)
+    c, err := compute_v1.NewDisksRESTClient(ctx)
     if err != nil {
         log.Printf("WARN: Failed to create disks client: %v", err)
         return 0
