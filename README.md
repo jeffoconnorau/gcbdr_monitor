@@ -26,7 +26,12 @@ GCBDR Monitor calculates change rates and detects anomalies in Google Cloud Back
 
 ### Installation
 
-1.  **Clone and Install**:
+1.  **Authenticate Locally** (if not using Cloud Shell or Service Account):
+    ```bash
+    gcloud auth application-default login
+    ```
+
+2.  **Clone and Install**:
     ```bash
     git clone <repository-url>
     cd gcbdr_monitor
@@ -34,14 +39,14 @@ GCBDR Monitor calculates change rates and detects anomalies in Google Cloud Back
     pip install -r requirements.txt
     ```
 
-2.  **Run Locally**:
+3.  **Run Locally**:
     ```bash
     export GOOGLE_CLOUD_PROJECT="your-project-id"
     python main.py
     ```
     Server starts at `http://0.0.0.0:8080`.
 
-3.  **Trigger Analysis**:
+4.  **Trigger Analysis**:
     ```bash
     # Analyze last 7 days for SQL resources, output as HTML
     curl "http://localhost:8080/?days=7&filter_name=*sql*&format=html"
@@ -93,6 +98,7 @@ See [observer/README.md](observer/README.md) for setup instructions.
   - Ensure backups exist within the requested `days` range.
 - **Permission Errors**:
   - Service Account needs `roles/logging.viewer` and `roles/compute.viewer`.
+  - **Local Development**: Run `gcloud auth application-default login` to authenticate with your user credentials. Ensure your user has the necessary IAM roles on the project.
 
 ### Debugging
 If report data seems incorrect, use the log inspector to verify raw availability:

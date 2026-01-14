@@ -148,7 +148,7 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 
 func (a *Analyzer) fetchAndParseVaultLogs(ctx context.Context) ([]JobData, error) {
 	filter := fmt.Sprintf(
-		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fgcb_backup_recovery_jobs" AND timestamp >= "%s"`,
+		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbdr_backup_restore_jobs" AND timestamp >= "%s"`,
 		a.ProjectID,
 		time.Now().AddDate(0, 0, -a.Days).Format(time.RFC3339),
 	)
