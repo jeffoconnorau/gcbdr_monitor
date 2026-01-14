@@ -61,6 +61,25 @@ func FormatCSV(result *analyzer.AnalysisResult) ([]byte, error) {
 		}
 	}
 
+	// Daily Baselines Section
+	if len(result.DailyBaselines) > 0 {
+		w.Write([]string{})
+		w.Write([]string{"DAILY BASELINE METRICS"})
+		w.Write([]string{"Date", "Modified (GB)", "New (GB)", "Deleted (GB)", "Suspicious (GB)", "Total Protected (GB)", "Resources"})
+
+		for _, b := range result.DailyBaselines {
+			w.Write([]string{
+				b.Date,
+				fmt.Sprintf("%.2f", b.ModifiedDataGB),
+				fmt.Sprintf("%.2f", b.NewDataGB),
+				fmt.Sprintf("%.2f", b.DeletedDataGB),
+				fmt.Sprintf("%.2f", b.SuspiciousDataGB),
+				fmt.Sprintf("%.2f", b.TotalProtectedGB),
+				fmt.Sprintf("%d", b.ResourceCount),
+			})
+		}
+	}
+
 	w.Flush()
 	return buf.Bytes(), w.Error()
 }
@@ -133,14 +152,46 @@ const htmlTemplate = `<!DOCTYPE html>
         </tr>
         {{end}}
     </table>
+
+    
+    {{if .DailyBaselines}}
+    <h2>Daily Baseline Metrics</h2>
+    <table>
+        <tr>
+            <th>Date</th>
+            <th>Modified (GB)</th>
+            <th>New (GB)</th>
+            <th>Deleted (GB)</th>
+            <th>Suspicious (GB)</th>
+            <th>Total Protected (GB)</th>
+            <th>Resources</th>
+        </tr>
+        {{range .DailyBaselines}}
+        <tr>
+            <td>{{.Date}}</td>
+            <td>{{printf "%.2f" .ModifiedDataGB}}</td>
+            <td style="color: {{if .NewDataGB}}green{{else}}inherit{{end}};">{{printf "%.2f" .NewDataGB}}</td>
+            <td style="color: {{if .DeletedDataGB}}red{{else}}inherit{{end}};">{{printf "%.2f" .DeletedDataGB}}</td>
+            <td style="color: {{if .SuspiciousDataGB}}orange{{else}}inherit{{end}};">{{printf "%.2f" .SuspiciousDataGB}}</td>
+            <td>{{printf "%.2f" .TotalProtectedGB}}</td>
+            <td>
+                {{.ResourceCount}}
+                {{if .NewResourceCount}}<span style="color:green;">(+{{.NewResourceCount}})</span>{{end}}
+                {{if .DeletedResourceCount}}<span style="color:red;">(-{{.DeletedResourceCount}})</span>{{end}}
+            </td>
+        </tr>
+        {{end}}
+    </table>
+    {{end}}
 </body>
 </html>`
 
 // HTMLData is the data structure for HTML template.
 type HTMLData struct {
-	Summary  analyzer.Summary
-	Anomalies []analyzer.Anomaly
-	AllStats []analyzer.ResourceStats
+	Summary        analyzer.Summary
+	Anomalies      []analyzer.Anomaly
+	DailyBaselines []analyzer.DailyBaseline
+	AllStats       []analyzer.ResourceStats
 }
 
 // FormatHTML formats the result as HTML.
@@ -153,9 +204,10 @@ func FormatHTML(result *analyzer.AnalysisResult) ([]byte, error) {
 	allStats := append(result.VaultWorkloads.ResourceStats, result.ApplianceWorkloads.ResourceStats...)
 
 	data := HTMLData{
-		Summary:   result.Summary,
-		Anomalies: result.Anomalies,
-		AllStats:  allStats,
+		Summary:        result.Summary,
+		Anomalies:      result.Anomalies,
+		DailyBaselines: result.DailyBaselines,
+		AllStats:       allStats,
 	}
 
 	var buf bytes.Buffer
