@@ -64,6 +64,7 @@ GCBDR Monitor calculates change rates and detects anomalies in Google Cloud Back
 ### Notifications
 Configure via environment variables:
 - **Google Chat**: Set `GOOGLE_CHAT_WEBHOOK` (Space ID or URL).
+  > **Note**: For local testing with a user account, use the full **Webhook URL** (Option 2). The "Space ID" method requires service account permissions (`chat.bot` scope) often unavailable to user accounts.
 - **Email**: Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_SENDER`, `EMAIL_RECIPIENTS`.
 - **Pub/Sub**: Set `PUBSUB_TOPIC`.
 
@@ -83,7 +84,6 @@ python scripts/inspect_logs.py --type appliance  # Check Appliance logs
 ## Observer Module
 For long-term trends and visual dashboards, use the **Observer Module**.
 See [observer/README.md](observer/README.md) for setup instructions.
-
 
 ## Troubleshooting
 
