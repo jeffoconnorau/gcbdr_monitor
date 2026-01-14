@@ -221,11 +221,27 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 	}
 	if gib, ok := payload["dataCopiedGiB"].(float64); ok {
 		job.GiBTransferred = gib
-	}
+	} else {
+        // Debug logging for missing/wrong type
+        if job.JobSource == "vault" && job.GiBTransferred == 0 {
+             // Only log occasionally or first one
+             // log.Printf("DEBUG: Missing dataCopiedGiB for %s. Keys: %v", job.JobID, reflect.ValueOf(payload).MapKeys())
+        }
+    }
 	if duration, ok := payload["durationSeconds"].(float64); ok {
 		job.DurationSeconds = duration
 	}
-	
+    
+    // Debug first few parsed jobs
+    if len(job.JobID) > 0 && (job.GiBTransferred > 0 || job.DurationSeconds > 0) {
+        // Good job
+    } else if len(job.JobID) > 0 {
+        // Log potential parse failure for non-empty job
+        log.Printf("DEBUG: Parsed Job %s (%s): GiB=%.2f, Dur=%.2f. Keys found: dataCopiedGiB=%v, durationSeconds=%v", 
+            job.JobID, source, job.GiBTransferred, job.DurationSeconds, 
+            payload["dataCopiedGiB"] != nil, payload["durationSeconds"] != nil)
+    }
+
 	return job
 }
 
@@ -326,6 +342,15 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 	for _, s := range stats {
 		statsMap[s.ResourceName] = s
 	}
+    
+    log.Printf("DEBUG: Detecting anomalies for %d jobs against %d resource stats", len(jobs), len(statsMap))
+    if len(jobs) > 0 {
+        j := jobs[0]
+        if s, ok := statsMap[j.ResourceName]; ok {
+            log.Printf("DEBUG: Sample Job: %s, Val=%.2f/%.2f. Stats: Avg=%.2f, StdDev=%.2f", 
+                j.ResourceName, j.GiBTransferred, j.DurationSeconds, s.AvgGiB, s.StdDevGiB)
+        }
+    }
 	
 	var anomalies []Anomaly
 	for _, job := range jobs {
