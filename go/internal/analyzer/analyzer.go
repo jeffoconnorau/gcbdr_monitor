@@ -207,6 +207,7 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		StartTime: entry.Timestamp,
 	}
 	
+	// Generic/Vault fields
 	if id, ok := payload["jobId"].(string); ok {
 		job.JobID = id
 	}
@@ -222,14 +223,77 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 	if gib, ok := payload["incrementalBackupSizeGib"].(float64); ok {
 		job.GiBTransferred = gib
 	}
+
+    // Appliance specific overrides
+    if source == "appliance" {
+        // Job ID
+        if name, ok := payload["jobName"].(string); ok {
+            job.JobID = name
+        } else if srcid, ok := payload["srcid"].(string); ok {
+            job.JobID = srcid
+        }
+
+        // Resource Name
+        if appName, ok := payload["appName"].(string); ok {
+            job.ResourceName = appName
+        }
+
+        // Resource Type
+        if appType, ok := payload["appType"].(string); ok {
+            job.ResourceType = appType
+        }
+
+        // Status (44003 is success)
+        job.Status = "SUCCESSFUL"
+
+        // Bytes Transferred (convert to GiB)
+        var bytes float64
+        foundBytes := false
+        
+        // Helper to get float from map
+        getFloat := func(key string) (float64, bool) {
+            if v, ok := payload[key].(float64); ok {
+                return v, true
+            }
+            if v, ok := payload[key].(string); ok {
+                 // Try parsing string as float
+                 var f float64
+                 if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+                     return f, true
+                 }
+            }
+            return 0, false
+        }
+
+        if v, ok := getFloat("dataCopiedInBytes"); ok {
+            bytes = v
+            foundBytes = true
+        } else if v, ok := getFloat("bytesWritten"); ok {
+            bytes = v
+            foundBytes = true
+        } else if v, ok := getFloat("transferSize"); ok {
+            bytes = v
+            foundBytes = true
+        }
+
+        if foundBytes {
+            job.GiBTransferred = bytes / (1024 * 1024 * 1024)
+        }
+    }
 	
     // Calculate duration from start/end times if available
     var startTime, endTime time.Time
     if st, ok := payload["startTime"].(string); ok {
         startTime, _ = time.Parse(time.RFC3339, st)
+    } else if et, ok := payload["eventTime"].(string); ok {
+         // Appliance logs use eventTime
+         startTime, _ = time.Parse(time.RFC3339, et)
     }
+
     if et, ok := payload["endTime"].(string); ok {
         endTime, _ = time.Parse(time.RFC3339, et)
+    } else if et, ok := payload["eventTime"].(string); ok {
+         endTime, _ = time.Parse(time.RFC3339, et)
     }
     
     if !startTime.IsZero() && !endTime.IsZero() {
@@ -238,13 +302,7 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		job.DurationSeconds = duration
     } 
     
-    // Debug logging for parsed values
-    /*
-    if len(job.JobID) > 0 {
-        log.Printf("DEBUG: Parsed Job %s: Name=%s, Status=%s, GiB=%.2f, Dur=%.2f", 
-            job.JobID, job.ResourceName, job.Status, job.GiBTransferred, job.DurationSeconds)
-    }
-    */
+
     
     // Debug first few parsed jobs
 
@@ -349,15 +407,6 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 	for _, s := range stats {
 		statsMap[s.ResourceName] = s
 	}
-    
-    log.Printf("DEBUG: Detecting anomalies for %d jobs against %d resource stats", len(jobs), len(statsMap))
-    if len(jobs) > 0 {
-        j := jobs[0]
-        if s, ok := statsMap[j.ResourceName]; ok {
-            log.Printf("DEBUG: Sample Job: %s, Val=%.2f/%.2f. Stats: Avg=%.2f, StdDev=%.2f", 
-                j.ResourceName, j.GiBTransferred, j.DurationSeconds, s.AvgGiB, s.StdDevGiB)
-        }
-    }
 	
 	var anomalies []Anomaly
 	for _, job := range jobs {
