@@ -1,172 +1,105 @@
 # GCBDR Monitor
 
-GCBDR Monitor is a Python-based service designed to monitor Google Cloud Backup and DR (GCBDR) jobs. It analyzes backup logs to identify anomalies in change rates, helping to detect potential issues or unexpected data growth.
+GCBDR Monitor calculates change rates and detects anomalies in Google Cloud Backup and DR (GCBDR) jobs. It helps ensure **data integrity**, monitor **performance issues**, and control **costs** by flagging unexpected behavior in your backup workloads.
 
 ## Features
 
-- **Multi-Workload Support**: Monitors both **Backup Vault** workloads and **Management Console** (Appliance) workloads.
-- **Log Enrichment**: Automatically enriches Appliance logs with missing size and transfer data by correlating with GCB Jobs logs.
-- **Split Reporting**: Provides distinct analysis for Vault and Appliance workloads while maintaining an aggregate summary.
-- **Enhanced Reporting**: Provides detailed statistics for each protected resource, including:
-    - Current Daily Change Rate (GB and %)
-    - Total Resource Size (GiB)
-    - Backup Job Count
-- **Anomaly Detection**: Compares current job statistics against historical averages to identify outliers.
-- **Notifications**: Alerts via Google Chat, Email, and Pub/Sub.
-- **Cloud Run Ready**: Designed to be deployed as a Cloud Run service.
-- **API Endpoint**: Exposes a simple HTTP endpoint to trigger analysis.
+- **Unified Monitoring**: Tracks both Vault and Appliance workloads.
+- **Smart Enrichment**: Correlates appliance logs with job data to fill missing size metrics.
+- **Advanced Anomaly Detection**:
+  - **Data Integrity**: Detects suspiciously small backups (e.g., empty source, configuration failure).
+  - **Performance**: Flags stalled or unusually slow jobs (Duration Spikes).
+  - **Cost Control**: Alerts on unexpected data growth (Size Spikes).
+- **Detailed Metrics**: Reports Daily Change Rate (GB & %), Total Resource Size (GiB), and Job Counts.
+- **Alerting**: Notifications via Google Chat, Email, and Pub/Sub.
+- **Cloud Ready**: Deployable as a Cloud Run service with a simple HTTP API.
 
-## Prerequisites
+## Getting Started
 
-- Python 3.9+
-- Google Cloud Project with:
-    - Cloud Logging enabled
-    - Permissions to read logs (`roles/logging.viewer` or similar)
-    - Permissions to view Compute Engine resources (`roles/compute.viewer`) for fetching disk sizes if missing in logs.
-    - **Cloud SQL Admin API** enabled in this project (`sqladmin.googleapis.com`) to look up Cloud SQL instance sizes.
+### Prerequisites
 
-## Metrics Explained
+- **Python 3.9+**
+- **Google Cloud Project** with:
+  - `roles/logging.viewer` (Read logs)
+  - `roles/compute.viewer` (Fetch disk sizes)
+  - **Cloud SQL Admin API** enabled (Fetch SQL instance sizes)
 
-- **Total Resource Size (GiB)**: The total size of the protected resource. If not found in backup logs, it is fetched from GCB Jobs logs (for appliances) or directly from the Compute Engine API (for GCE instances).
-- **Current Daily Change Rate (GB)**: The average daily change rate calculated over the requested reporting period (default 7 days).
-- **Current Daily Change Rate (%)**: (Current Daily Change GB / Total Resource Size GB) * 100.
-- **Backup Job Count**: The total number of successful backup jobs for the resource in the analyzed period.
+### Installation
 
-## Installation
-
-1.  **Clone the repository:**
+1.  **Clone and Install**:
     ```bash
     git clone <repository-url>
     cd gcbdr_monitor
-    ```
-
-2.  **Install dependencies:**
-    It is recommended to use a virtual environment.
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
+    python3 -m venv venv && source venv/bin/activate
     pip install -r requirements.txt
     ```
 
-## Usage
-
-### Running Locally
-
-1.  **Set Environment Variables:**
+2.  **Run Locally**:
     ```bash
     export GOOGLE_CLOUD_PROJECT="your-project-id"
-    ```
-
-2.  **Start the Application:**
-    ```bash
     python main.py
     ```
-    The server will start on `http://0.0.0.0:8080` (or the port specified by `PORT` env var).
+    Server starts at `http://0.0.0.0:8080`.
 
-3.  **Trigger Analysis:**
-    You can trigger the analysis by visiting the root endpoint:
+3.  **Trigger Analysis**:
     ```bash
-    curl "http://localhost:8080/?days=7&filter_name=*sql*&source_type=appliance&format=html"
+    # Analyze last 7 days for SQL resources, output as HTML
+    curl "http://localhost:8080/?days=7&filter_name=*sql*&format=html"
     ```
-    - `days`: (Optional) Number of days of history to analyze (default: 7).
-    - `filter_name`: (Optional) Filter resources by name. Supports wildcards (e.g., `*sql*`, `vm-?`) or case-insensitive substring search.
-    - `source_type`: (Optional) Filter by backup source. Options: `all` (default), `vault`, `appliance`.
-    - `format`: (Optional) Output format. Options: `json` (default), `csv`, `html`.
+    **Parameters**:
+    - `days`: History depth (default: 7).
+    - `filter_name`: Resource name filter (wildcards supported).
+    - `source_type`: `all` (default), `vault`, `appliance`.
+    - `format`: `json` (default), `csv`, `html`.
 
-### Code Structure
+## Metrics Explained
 
-- **main.py**: The main Flask application file. It handles routing and request handling.
-- **analyzer.py**: The core logic of the application. It fetches, parses, and analyzes the backup logs.
-- **formatters.py**: Contains functions to format the analysis results into CSV.
-- **notifier.py**: Manages sending notifications via Google Chat, Email, and Pub/Sub.
-- **templates/report.html**: Jinja2 template for the HTML report.
+- **Total Resource Size (GiB)**: Full size of the protected asset (from logs or API).
+- **Daily Change Rate (GB)**: Average daily incremental change.
+- **Change Rate (%)**: Relative change against total size.
+- **Anomalies**: Automatically flagged events (e.g., "Size Spike (Z=4.2)").
 
-### Inspecting Logs
-
-Use the `inspect_logs.py` utility to view raw log entries and verify data:
-
-```bash
-# Inspect Backup Vault logs (default)
-python scripts/inspect_logs.py --type vault
-
-# Inspect Appliance logs
-python scripts/inspect_logs.py --type appliance
-
-# Inspect GCB Jobs logs (used for enrichment)
-python scripts/inspect_logs.py --type gcb_jobs
-```
-
-### Anomaly Detection
-
-The tool automatically detects anomalies in backup jobs using advanced statistical analysis:
-
-1.  **Size Spikes (Z-Score)**: Flags jobs where the data transferred is significantly higher than the historical average (> 3 standard deviations).
-2.  **Size Drop-offs**: Flags jobs where the data transferred is suspiciously small (< 10% of the average), which might indicate an empty source or configuration issue.
-3.  **Duration Spikes**: Flags jobs that take significantly longer than usual (> 3 standard deviations).
-
-Anomalies are reported in the JSON, CSV, and HTML outputs with a `reasons` field explaining the cause (e.g., "Size Spike (Z=4.2)", "Size Drop-off").
-
-You can also suppress notifications for a specific run by adding `&notify=false` to the URL.
+## Advanced Usage
 
 ### Notifications
+Configure via environment variables:
+- **Google Chat**: Set `GOOGLE_CHAT_WEBHOOK` (Space ID or URL).
+- **Email**: Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_SENDER`, `EMAIL_RECIPIENTS`.
+- **Pub/Sub**: Set `PUBSUB_TOPIC`.
 
-The tool can alert you via Google Chat or Email when anomalies are detected.
+### Cloud Run Deployment
+```bash
+gcloud builds submit --tag gcr.io/your-project/gcbdr-monitor
+gcloud run deploy gcbdr-monitor --image gcr.io/your-project/gcbdr-monitor --platform managed --allow-unauthenticated
+```
 
-#### Configuration
-Set the following environment variables to enable notifications:
+### Log Inspection Tool
+Use `scripts/inspect_logs.py` to debug raw data:
+```bash
+python scripts/inspect_logs.py --type vault      # Check Vault logs
+python scripts/inspect_logs.py --type appliance  # Check Appliance logs
+```
 
-**Google Chat:**
-- `GOOGLE_CHAT_WEBHOOK`: 
-    - **Option 1 (Space ID)**: Just the Space ID (e.g., `AAAA...`) or Resource Name (`spaces/AAAA...`). Requires the Service Account to have permissions in the Google Chat Space.
-    - **Option 2 (Webhook)**: The full Webhook URL (e.g., `https://chat.googleapis.com/v1/spaces/...`).
-
-**Email:**
-- `SMTP_HOST`: Hostname of the SMTP server (e.g., `smtp.gmail.com`).
-- `SMTP_PORT`: Port (default: 587).
-- `SMTP_USER`: SMTP Username/Email.
-- `SMTP_PASSWORD`: SMTP Password (or App Password).
-- `EMAIL_SENDER`: Email address to send from.
-- `EMAIL_RECIPIENTS`: Comma-separated list of recipient emails.
-
-**Pub/Sub:**
-- `PUBSUB_TOPIC`: The full topic name (e.g., `projects/your-project/topics/your-topic`).
-
-### Deploying to Cloud Run
-
-1.  **Build the Container:**
-    ```bash
-    gcloud builds submit --tag gcr.io/your-project-id/gcbdr-monitor
-    ```
-
-2.  **Deploy:**
-    ```bash
-    gcloud run deploy gcbdr-monitor \
-      --image gcr.io/your-project-id/gcbdr-monitor \
-      --platform managed \
-      --region your-region \
-      --allow-unauthenticated
-    ```
-
-### Observer Module (Visual Dashboard)
-
-The **Observer Module** provides a comprehensive visual dashboard using Grafana to track long-term trends and historical data.
-For detailed setup instructions, see [observer/README.md](observer/README.md).
-
-**Dashboard File**: `observer/dashboards/grafana_gcbdr_dashboard.json`
-
-**Key Panels:**
-- **Job Statistics**: High-level counters for Native vs. Management Console jobs (Backup/Restore counts, Daily Job Average).
-- **Data Volume**: Time-series view of data volume (GB) processed by backup jobs.
-- **Top 10 Anomalies**: A list of the most significant outliers in terms of duration or size, sorted by deviation.
-- **Detailed Job Information**: Segmented view of jobs by Source (Native/Mgmt) and Status (Success/Fail/Warning).
-- **Restore Analysis**: Stacked bar charts showing restore activity over the last 7 days.
+## Observer Module
+For long-term trends and visual dashboards, use the **Observer Module**.
+See [observer/README.md](observer/README.md) for setup instructions.
 
 
+## Troubleshooting
 
+### Common Issues
+- **"No data found"**:
+  - Verify `GOOGLE_CLOUD_PROJECT` is set correctly.
+  - Ensure backups exist within the requested `days` range.
+- **Permission Errors**:
+  - Service Account needs `roles/logging.viewer` and `roles/compute.viewer`.
 
-
-
+### Debugging
+If report data seems incorrect, use the log inspector to verify raw availability:
+```bash
+# Check if any Vault logs exist
+python scripts/inspect_logs.py --type vault
+```
 
 ## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE).
