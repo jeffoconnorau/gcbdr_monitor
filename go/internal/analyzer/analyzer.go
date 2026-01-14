@@ -157,7 +157,7 @@ func (a *Analyzer) fetchAndParseVaultLogs(ctx context.Context) ([]JobData, error
 
 func (a *Analyzer) fetchAndParseApplianceLogs(ctx context.Context) ([]JobData, error) {
 	filter := fmt.Sprintf(
-		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId=44003 AND timestamp >= "%s"`,
+		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId=(44003) AND timestamp >= "%s"`,
 		a.ProjectID,
 		time.Now().AddDate(0, 0, -a.Days).Format(time.RFC3339),
 	)
@@ -169,6 +169,7 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 	log.Printf("DEBUG: Querying logs with filter: %s", filter)
 	it := a.client.Entries(ctx, logadmin.Filter(filter))
 	
+	count := 0
 	for {
 		entry, err := it.Next()
 		if err == iterator.Done {
@@ -176,6 +177,14 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate logs: %w", err)
+		}
+
+		count++
+		if count <= 3 {
+			log.Printf("DEBUG: Found entry: %v", entry.Timestamp)
+			if count == 1 {
+				log.Printf("DEBUG: Sample payload keys: %+v", entry.Payload)
+			}
 		}
 		
 		job := parseLogEntry(entry, source)
@@ -191,6 +200,7 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 func parseLogEntry(entry *logging.Entry, source string) *JobData {
 	payload, ok := entry.Payload.(map[string]interface{})
 	if !ok {
+		log.Printf("DEBUG: Entry payload is not map[string]interface{}: %T", entry.Payload)
 		return nil
 	}
 	
