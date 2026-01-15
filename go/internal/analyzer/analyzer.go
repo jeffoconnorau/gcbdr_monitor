@@ -478,9 +478,6 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 		if foundBytes {
 			job.GiBTransferred = bytes / (1024 * 1024 * 1024)
 		}
-		if foundBytes {
-			job.GiBTransferred = bytes / (1024 * 1024 * 1024)
-		}
 	} else if source == "gcb" {
 		// GCB Job Logs Parsing
         // Debug: Log keys for first GCB job to verify schema
@@ -522,7 +519,10 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 
 		if totalGib > 0 {
 			job.TotalResourceSizeBytes = int64(totalGib * 1024 * 1024 * 1024)
-		}
+            a.LogDebug("DEBUG: SETTING GCB SIZE: %.2f GiB -> %d bytes for Job %s", totalGib, job.TotalResourceSizeBytes, job.JobID)
+		} else {
+             a.LogDebug("DEBUG: GCB Job %s has 0 size (totalGib=%.2f)", job.JobID, totalGib)
+        }
 
 		// Transferred Parsing for GCB
 		if v, ok := getFloat("data_copied_in_gib"); ok {
