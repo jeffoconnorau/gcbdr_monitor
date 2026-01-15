@@ -60,7 +60,25 @@ export GOOGLE_APPLICATION_CREDENTIALS="key.json"
 
 > **Note**: On Cloud Run, the service automatically uses the attached service account—no key file needed.
 
-### Installation
+### Installation (Go - Recommended)
+
+1.  **Prerequisites**: Go 1.21+ installed.
+
+2.  **Build**:
+    ```bash
+    cd go
+    go build -o ../gcbdr-monitor cmd/gcbdr-monitor/main.go
+    cd ..
+    ```
+
+3.  **Run**:
+    ```bash
+    export GOOGLE_CLOUD_PROJECT="your-project-id"
+    ./gcbdr-monitor
+    ```
+    Server starts at `http://0.0.0.0:8080`.
+
+### Installation (Python - Legacy)
 
 1.  **Authenticate Locally** (if not using Cloud Shell or Service Account):
     ```bash
