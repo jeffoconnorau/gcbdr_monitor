@@ -166,6 +166,8 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 
 		if jobs, err := a.fetchAndParseApplianceLogs(ctx); err == nil {
 			// Enrich appliance jobs
+            var enrichedCount int
+            var missingCount int
 			for i := range jobs {
 				job := &jobs[i]
 				// Try to match with GCB job
@@ -174,13 +176,20 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 					if job.TotalResourceSizeBytes == 0 && gcbData.TotalResourceSizeBytes > 0 {
 						job.TotalResourceSizeBytes = gcbData.TotalResourceSizeBytes
 						log.Printf("DEBUG: Enriched job %s with size %d from GCB", job.JobID, job.TotalResourceSizeBytes)
+                        enrichedCount++
 					}
 					if job.GiBTransferred == 0 && gcbData.GiBTransferred > 0 {
 						job.GiBTransferred = gcbData.GiBTransferred
 						log.Printf("DEBUG: Enriched job %s with transferred %.2f GiB from GCB", job.JobID, job.GiBTransferred)
 					}
-				}
+				} else {
+                    if missingCount < 5 {
+                        log.Printf("DEBUG: No GCB Match for Appliance Job: %s", job.JobID)
+                        missingCount++
+                    }
+                }
 			}
+            log.Printf("DEBUG: Enriched %d appliance jobs with GCB data", enrichedCount)
 
 			allApplianceJobs = filterJobs(jobs, filterName)
 			// Calculate stats
@@ -370,6 +379,8 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 			job.JobID = name
 		} else if srcid, ok := payload["srcid"].(string); ok {
 			job.JobID = srcid
+		} else if v, ok := payload["srcid"].(float64); ok {
+			job.JobID = fmt.Sprintf("%.0f", v)
 		}
 
 		// Resource Name
@@ -519,12 +530,19 @@ func (a *Analyzer) fetchAndParseGCBJobLogs(ctx context.Context) (map[string]JobD
 		return nil, err
 	}
 
+	// jobMap := make(map[string]JobData)
 	jobMap := make(map[string]JobData)
+    var count int
 	for _, job := range jobs {
 		if job.JobID != "" {
 			jobMap[job.JobID] = job
+            if count < 5 {
+                log.Printf("DEBUG: GCB Job found: %s, Size: %d", job.JobID, job.TotalResourceSizeBytes)
+                count++
+            }
 		}
 	}
+    log.Printf("DEBUG: Created GCB Job Map with %d entries", len(jobMap))
 	return jobMap, nil
 }
 
