@@ -554,7 +554,8 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 	}
 
 	// Extract total resource size (logic matches Python analyzer.py)
-	var totalBytes int64
+	// Initialize with existing value to avoid overwriting GCB size logic
+	var totalBytes int64 = job.TotalResourceSizeBytes
 
 	// Helper to get int64 or valid float64 as int64
 	getAsInt64 := func(v interface{}) int64 {
