@@ -293,11 +293,18 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		// Status (44003 is success)
 		job.Status = "SUCCESSFUL"
 
-		// Bytes Transferred (convert to GiB)
-		var bytes float64
-		foundBytes := false
+			// Check for VMware in errorMessage to distinguish from GCE/SQL
+			if errMsg, ok := payload["errorMessage"].(string); ok {
+				if strings.Contains(errMsg, "VMware") {
+					job.ResourceType = "VMware VM"
+				}
+			}
 
-		// Helper to get float from map
+			// Bytes Transferred (convert to GiB)
+			var bytes float64
+			foundBytes := false
+
+			// Helper to get float from map
 		getFloat := func(key string) (float64, bool) {
 			if v, ok := payload[key].(float64); ok {
 				return v, true
@@ -472,7 +479,10 @@ func (a *Analyzer) calculateStatistics(jobs []JobData, days int) []ResourceStats
                 maxTotalBytes = val
             } else {
                 var sizeBytes int64
-                if strings.Contains(resourceType, "gce") || strings.Contains(resourceType, "compute") || strings.Contains(resourceType, "vm") {
+                if strings.Contains(resourceType, "vmware") {
+                    // Skip enrichment for VMware VMs
+                    sizeBytes = 0
+                } else if strings.Contains(resourceType, "gce") || strings.Contains(resourceType, "compute") || strings.Contains(resourceType, "vm") {
                     sizeBytes = a.fetchGCEInstanceDetails(ctx, useProjectID, name)
                 } else if strings.Contains(resourceType, "disk") {
                     sizeBytes = a.fetchGCEDiskDetails(ctx, useProjectID, name)
