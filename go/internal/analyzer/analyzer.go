@@ -484,12 +484,22 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 	} else if source == "gcb" {
 		// GCB Job Logs Parsing
         // Debug: Log keys for first GCB job to verify schema
-        if a.DebugLog != nil && len(a.DebugLog) < 20 { // Heuristic to log early only
+        if a.DebugLog != nil && len(a.DebugLog) < 20 {
              keys := make([]string, 0, len(payload))
              for k := range payload {
                  keys = append(keys, k)
              }
              a.LogDebug("DEBUG: GCB Payload Keys: %v", keys)
+             
+             // Inspect specific size fields
+             if val, ok := payload["resource_data_size_in_gib"]; ok {
+                 a.LogDebug("DEBUG: resource_data_size_in_gib: Type=%T, Value=%v", val, val)
+             } else {
+                 a.LogDebug("DEBUG: resource_data_size_in_gib KEY MISSING")
+             }
+             if val, ok := payload["snapshot_disk_size_in_gib"]; ok {
+                 a.LogDebug("DEBUG: snapshot_disk_size_in_gib: Type=%T, Value=%v", val, val)
+             }
         }
 
 		if name, ok := payload["job_name"].(string); ok {
