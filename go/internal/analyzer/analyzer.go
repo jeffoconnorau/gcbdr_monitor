@@ -87,6 +87,7 @@ type AnalysisResult struct {
 	ApplianceWorkloads WorkloadResult  `json:"appliance_workloads"`
 	Anomalies          []Anomaly       `json:"anomalies"`
 	DailyBaselines     []DailyBaseline `json:"daily_baselines"`
+    DebugMessages      []string        `json:"debug_messages,omitempty"`
 }
 
 // Summary provides high-level stats.
@@ -103,6 +104,7 @@ type Summary struct {
 	CurrentDailyChangePct   float64 `json:"current_daily_change_pct"`
 	ZeroSizeVaultCount      int     `json:"zero_size_vault_count"`
 	TotalVaultResourceCount int     `json:"total_vault_count"`
+    ProjectID               string  `json:"project_id"`
 }
 
 // WorkloadResult holds stats for a workload type.
@@ -140,7 +142,18 @@ func (a *Analyzer) Close() error {
 
 // Analyze performs the full analysis.
 func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (*AnalysisResult, error) {
-	result := &AnalysisResult{}
+	result := &AnalysisResult{
+        DebugMessages: []string{},
+    }
+    result.Summary.ProjectID = a.ProjectID
+    
+    // Helper to add debug message
+    addDebug := func(msg string) {
+        result.DebugMessages = append(result.DebugMessages, msg)
+        log.Println(msg)
+    }
+
+    addDebug(fmt.Sprintf("Starting analysis for project %s, source_type: %s", a.ProjectID, sourceType))
 
 	// Collect all jobs
 	var allVaultJobs, allApplianceJobs []JobData

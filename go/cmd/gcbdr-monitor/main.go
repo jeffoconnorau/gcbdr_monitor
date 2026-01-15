@@ -16,7 +16,7 @@ import (
 	"github.com/jeffoconnorau/gcbdr_monitor/go/internal/notifier"
 )
 
-const Version = "2.0.0"
+const Version = "2.1.0-debug"
 
 func main() {
 	port := os.Getenv("PORT")
