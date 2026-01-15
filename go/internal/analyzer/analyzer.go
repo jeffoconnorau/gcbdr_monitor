@@ -315,7 +315,7 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 			return nil, fmt.Errorf("failed to iterate logs: %w", err)
 		}
 
-		job := parseLogEntry(entry, source)
+		job := a.parseLogEntry(entry, source)
 		if job != nil {
 			jobs = append(jobs, *job)
 		}
@@ -350,7 +350,8 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 	return jobs, nil
 }
 
-func parseLogEntry(entry *logging.Entry, source string) *JobData {
+
+func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 	if entry.Payload == nil {
 		log.Printf("Debug: Entry payload is nil for %s", source)
 		return nil
