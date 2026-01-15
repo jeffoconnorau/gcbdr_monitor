@@ -271,18 +271,13 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	result.Summary.TotalJobs = len(allJobs)
 	result.Summary.SuccessfulJobs = successCount
 	result.Summary.FailedJobs = failCount
-	result.Summary.TotalResourceSizeGB = roundToTwoDecimals(totalSizeGB)
-	result.Summary.CurrentDailyChangeGB = roundToTwoDecimals(dailyChangeGB)
-	result.Summary.CurrentDailyChangePct = roundToTwoDecimals(dailyChangePct)
+	result.Summary.TotalResourceSizeGB = totalSizeGB
+	result.Summary.CurrentDailyChangeGB = dailyChangeGB
+	result.Summary.CurrentDailyChangePct = dailyChangePct
     result.Summary.ZeroSizeVaultCount = zeroSizeVaultCount
     result.Summary.TotalVaultResourceCount = len(result.VaultWorkloads.ResourceStats)
 	result.Summary.AnomalyCount = len(result.Anomalies)
 	return result, nil
-}
-
-// roundToTwoDecimals helper
-func roundToTwoDecimals(val float64) float64 {
-	return math.Round(val*100) / 100
 }
 
 func (a *Analyzer) fetchAndParseVaultLogs(ctx context.Context) ([]JobData, error) {
@@ -485,9 +480,24 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 		}
 	} else if source == "gcb" {
 		// GCB Job Logs Parsing
-	} else if source == "gcb" {
-		// GCB Job Logs Parsing
-
+        // Debug: Log keys for first GCB job to verify schema
+        if a.DebugLog != nil && len(a.DebugLog) < 20 {
+             keys := make([]string, 0, len(payload))
+             for k := range payload {
+                 keys = append(keys, k)
+             }
+             a.LogDebug("DEBUG: GCB Payload Keys: %v", keys)
+             
+             // Inspect specific size fields
+             if val, ok := payload["resource_data_size_in_gib"]; ok {
+                 a.LogDebug("DEBUG: resource_data_size_in_gib: Type=%T, Value=%v", val, val)
+             } else {
+                 a.LogDebug("DEBUG: resource_data_size_in_gib KEY MISSING")
+             }
+             if val, ok := payload["snapshot_disk_size_in_gib"]; ok {
+                 a.LogDebug("DEBUG: snapshot_disk_size_in_gib: Type=%T, Value=%v", val, val)
+             }
+        }
 
 		if name, ok := payload["job_name"].(string); ok {
 			job.JobID = name
@@ -509,7 +519,10 @@ func (a *Analyzer) parseLogEntry(entry *logging.Entry, source string) *JobData {
 
 		if totalGib > 0 {
 			job.TotalResourceSizeBytes = int64(totalGib * 1024 * 1024 * 1024)
-		}
+            a.LogDebug("DEBUG: SETTING GCB SIZE: %.2f GiB -> %d bytes for Job %s", totalGib, job.TotalResourceSizeBytes, job.JobID)
+		} else {
+             a.LogDebug("DEBUG: GCB Job %s has 0 size (totalGib=%.2f)", job.JobID, totalGib)
+        }
 
 		// Transferred Parsing for GCB
 		if v, ok := getFloat("data_copied_in_gib"); ok {
@@ -739,14 +752,14 @@ func (a *Analyzer) calculateStatistics(jobs []JobData, days int) []ResourceStats
 			ResourceName:          name,
 			ResourceType:          rjobs[0].ResourceType,
 			JobSource:             rjobs[0].JobSource,
-			TotalResourceSizeGB:   roundToTwoDecimals(totalResourceSizeGB),
-			CurrentDailyChangeGB:  roundToTwoDecimals(dailyChangeGB),
-			CurrentDailyChangePct: roundToTwoDecimals(dailyChangePct),
+			TotalResourceSizeGB:   totalResourceSizeGB,
+			CurrentDailyChangeGB:  dailyChangeGB,
+			CurrentDailyChangePct: dailyChangePct,
 			BackupJobCount:        len(rjobs),
-			AvgGiB:                roundToTwoDecimals(avgGiB),
-			StdDevGiB:             roundToTwoDecimals(stdDevGiB),
-			AvgDurationSeconds:    roundToTwoDecimals(avgDuration),
-			StdDevDuration:        roundToTwoDecimals(stdDevDuration),
+			AvgGiB:                avgGiB,
+			StdDevGiB:             stdDevGiB,
+			AvgDurationSeconds:    avgDuration,
+			StdDevDuration:        stdDevDuration,
 		})
 	}
 
@@ -948,11 +961,11 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, stats []Resour
 
 		baselines = append(baselines, DailyBaseline{
 			Date:                 date,
-			ModifiedDataGB:       roundToTwoDecimals(float64(modifiedBytes) / (1024 * 1024 * 1024)),
-			NewDataGB:            roundToTwoDecimals(float64(newBytes) / (1024 * 1024 * 1024)),
-			DeletedDataGB:        roundToTwoDecimals(float64(deletedBytes) / (1024 * 1024 * 1024)),
-			SuspiciousDataGB:     roundToTwoDecimals(float64(suspiciousBytes) / (1024 * 1024 * 1024)),
-			TotalProtectedGB:     roundToTwoDecimals(float64(totalProtectedBytes) / (1024 * 1024 * 1024)),
+			ModifiedDataGB:       float64(modifiedBytes) / (1024 * 1024 * 1024),
+			NewDataGB:            float64(newBytes) / (1024 * 1024 * 1024),
+			DeletedDataGB:        float64(deletedBytes) / (1024 * 1024 * 1024),
+			SuspiciousDataGB:     float64(suspiciousBytes) / (1024 * 1024 * 1024),
+			TotalProtectedGB:     float64(totalProtectedBytes) / (1024 * 1024 * 1024),
 			ResourceCount:        len(todayResources),
 			NewResourceCount:     newResourceCount,
 			DeletedResourceCount: deletedResourceCount,
