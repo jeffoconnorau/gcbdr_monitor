@@ -651,6 +651,8 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, stats []Resour
 	}
 
 	// Evaluate each day
+	todayStr := time.Now().UTC().Format("2006-01-02")
+
 	for _, date := range sortedDates {
 		daysJobs := jobsByDate[date]
 
@@ -696,14 +698,23 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, stats []Resour
 		// Deleted Data (seen before but not today)
 		var deletedBytes int64
 		var deletedResourceCount int
+		var ignoredDeletedBytes int64 // Bytes we suppressed because it's today
+
+		isToday := date == todayStr
+
 		for r := range allSeenResources {
 			if !todayResources[r] {
-				// We need the size of the deleted resource.
-				// Best guess: use enriched size or 0
-				if size, ok := enrichedSizeMap[r]; ok {
-					deletedBytes += size
-				}
-				deletedResourceCount++
+				size := enrichedSizeMap[r] 
+                // Note: enrichedSizeMap comes from stats, which aggregates history.
+                // It is the best guess for "last known size".
+                
+				if isToday {
+                    // Suppress deletion for today as jobs might not have run yet
+                    ignoredDeletedBytes += size
+                } else {
+                    deletedBytes += size
+                    deletedResourceCount++
+                }
 			}
 		}
 
@@ -712,6 +723,11 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, stats []Resour
 		for _, size := range todayResourceSizes {
 			totalProtectedBytes += size
 		}
+        
+        // If today, assume ignored deleted resources are still protected
+        if isToday {
+            totalProtectedBytes += ignoredDeletedBytes
+        }
 
 		// Update allSeen
 		for r := range todayResources {
