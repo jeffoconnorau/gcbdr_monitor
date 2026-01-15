@@ -98,41 +98,63 @@ const htmlTemplate = `<!DOCTYPE html>
         tr:nth-child(even) { background: #0f0f23; }
         tr:hover { background: #1f4068; }
         .anomaly { background: #4a1a1a !important; }
-        .summary { display: flex; gap: 20px; margin-bottom: 20px; }
+        .summary { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
         .stat-card { background: #16213e; padding: 20px; border-radius: 8px; min-width: 150px; }
         .stat-card h3 { margin: 0; color: #00d9ff; font-size: 2em; }
         .stat-card p { margin: 5px 0 0; color: #888; }
+        .warning { background: #5a4a1a; color: #ffd700; padding: 15px; border: 1px solid #b8860b; border-radius: 5px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
     <h1>GCBDR Monitor Report</h1>
     
+    {{if gt .Summary.ZeroSizeVaultCount 0}}
+    <div class="warning">
+        <strong>⚠️ Potential Permission Issue Detected</strong><br>
+        {{.Summary.ZeroSizeVaultCount}} out of {{.Summary.TotalVaultResourceCount}} Vault resources are showing 0GB size.<br>
+        Please check that the service account has <code>Compute Viewer</code> or <code>Cloud SQL Viewer</code> permissions.
+    </div>
+    {{end}}
+
     <div class="summary">
         <div class="stat-card">
-            <h3>{{.Summary.TotalVaultJobs}}</h3>
-            <p>Vault Jobs</p>
+            <h3>{{.Summary.TotalJobs}}</h3>
+            <p>Total Jobs</p>
         </div>
         <div class="stat-card">
-            <h3>{{.Summary.TotalApplianceJobs}}</h3>
-            <p>Appliance Jobs</p>
+            <h3 style="color: #4CAF50;">{{.Summary.SuccessfulJobs}}</h3>
+            <p>Successful</p>
         </div>
         <div class="stat-card">
-            <h3>{{.Summary.AnomalyCount}}</h3>
+            <h3 style="color: #f44336;">{{.Summary.FailedJobs}}</h3>
+            <p>Failed</p>
+        </div>
+        <div class="stat-card">
+            <h3 style="color: #ff9800;">{{.Summary.AnomalyCount}}</h3>
             <p>Anomalies</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{printf "%.2f" .Summary.TotalResourceSizeGB}}</h3>
+            <p>Total Size (GiB)</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{printf "%.2f" .Summary.CurrentDailyChangeGB}}</h3>
+            <p>Daily Change (GB) ({{printf "%.2f" .Summary.CurrentDailyChangePct}}%)</p>
         </div>
     </div>
 
     {{if .Anomalies}}
-    <h2>⚠️ Anomalies</h2>
+    <h2>⚠️ Anomalies Detected</h2>
     <table>
-        <tr><th>Resource</th><th>Job ID</th><th>Date/Time</th><th>Transferred</th><th>Average</th><th>Reasons</th></tr>
+        <tr><th>Job ID</th><th>Resource</th><th>Date/Time</th><th>Change (GB)</th><th>Avg (GB)</th><th>Duration (s)</th><th>Reasons</th></tr>
         {{range .Anomalies}}
         <tr class="anomaly">
-            <td>{{.Resource}}</td>
             <td>{{.JobID}}</td>
+            <td>{{.Resource}}</td>
             <td>{{.Date}} {{.Time}}</td>
-            <td>{{printf "%.2f" .GiBTransferred}} GiB</td>
-            <td>{{printf "%.2f" .AvgGiB}} GiB</td>
+            <td>{{printf "%.2f" .GiBTransferred}}</td>
+            <td>{{printf "%.2f" .AvgGiB}}</td>
+            <td>{{printf "%.0f" .DurationSeconds}}</td>
             <td>{{range .Reasons}}{{.}}<br>{{end}}</td>
         </tr>
         {{end}}
@@ -141,13 +163,15 @@ const htmlTemplate = `<!DOCTYPE html>
 
     <h2>Resource Statistics</h2>
     <table>
-        <tr><th>Resource</th><th>Type</th><th>Source</th><th>Daily Change (GB)</th><th>Job Count</th></tr>
+        <tr><th>Resource Name</th><th>Type</th><th>Source</th><th>Total Size (GiB)</th><th>Daily Change (GB)</th><th>Daily Change (%)</th><th>Job Count</th></tr>
         {{range .AllStats}}
         <tr>
             <td>{{.ResourceName}}</td>
             <td>{{.ResourceType}}</td>
             <td>{{.JobSource}}</td>
+            <td>{{printf "%.2f" .TotalResourceSizeGB}}</td>
             <td>{{printf "%.2f" .CurrentDailyChangeGB}}</td>
+            <td>{{printf "%.2f" .CurrentDailyChangePct}}</td>
             <td>{{.BackupJobCount}}</td>
         </tr>
         {{end}}
@@ -170,14 +194,14 @@ const htmlTemplate = `<!DOCTYPE html>
         <tr>
             <td>{{.Date}}</td>
             <td>{{printf "%.2f" .ModifiedDataGB}}</td>
-            <td style="color: {{if .NewDataGB}}green{{else}}inherit{{end}};">{{printf "%.2f" .NewDataGB}}</td>
-            <td style="color: {{if .DeletedDataGB}}red{{else}}inherit{{end}};">{{printf "%.2f" .DeletedDataGB}}</td>
-            <td style="color: {{if .SuspiciousDataGB}}orange{{else}}inherit{{end}};">{{printf "%.2f" .SuspiciousDataGB}}</td>
+            <td style="color: {{if .NewDataGB}}#4CAF50{{else}}inherit{{end}};">{{printf "%.2f" .NewDataGB}}</td>
+            <td style="color: {{if .DeletedDataGB}}#f44336{{else}}inherit{{end}};">{{printf "%.2f" .DeletedDataGB}}</td>
+            <td style="color: {{if .SuspiciousDataGB}}#ff9800{{else}}inherit{{end}};">{{printf "%.2f" .SuspiciousDataGB}}</td>
             <td>{{printf "%.2f" .TotalProtectedGB}}</td>
             <td>
                 {{.ResourceCount}}
-                {{if .NewResourceCount}}<span style="color:green;">(+{{.NewResourceCount}})</span>{{end}}
-                {{if .DeletedResourceCount}}<span style="color:red;">(-{{.DeletedResourceCount}})</span>{{end}}
+                {{if .NewResourceCount}}<span style="color:#4CAF50;">(+{{.NewResourceCount}})</span>{{end}}
+                {{if .DeletedResourceCount}}<span style="color:#f44336;">(-{{.DeletedResourceCount}})</span>{{end}}
             </td>
         </tr>
         {{end}}

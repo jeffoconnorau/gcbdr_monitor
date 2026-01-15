@@ -90,10 +90,19 @@ type AnalysisResult struct {
 }
 
 // Summary provides high-level stats.
+// Summary provides high-level stats.
 type Summary struct {
-	TotalVaultJobs     int `json:"total_vault_jobs"`
-	TotalApplianceJobs int `json:"total_appliance_jobs"`
-	AnomalyCount       int `json:"anomaly_count"`
+	TotalVaultJobs          int     `json:"total_vault_jobs"`
+	TotalApplianceJobs      int     `json:"total_appliance_jobs"`
+	TotalJobs               int     `json:"total_jobs"`
+	SuccessfulJobs          int     `json:"successful_jobs"`
+	FailedJobs              int     `json:"failed_jobs"`
+	AnomalyCount            int     `json:"anomaly_count"`
+	TotalResourceSizeGB     float64 `json:"total_resource_size_gb"`
+	CurrentDailyChangeGB    float64 `json:"current_daily_change_gb"`
+	CurrentDailyChangePct   float64 `json:"current_daily_change_pct"`
+	ZeroSizeVaultCount      int     `json:"zero_size_vault_count"`
+	TotalVaultResourceCount int     `json:"total_vault_count"`
 }
 
 // WorkloadResult holds stats for a workload type.
@@ -149,7 +158,30 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	}
 
 	if sourceType == "all" || sourceType == "appliance" {
+		// Fetch GCB Logs for enrichment
+		gcbJobs, err := a.fetchAndParseGCBJobLogs(ctx)
+		if err != nil {
+			log.Printf("Warning: failed to fetch GCB logs: %v", err)
+		}
+
 		if jobs, err := a.fetchAndParseApplianceLogs(ctx); err == nil {
+			// Enrich appliance jobs
+			for i := range jobs {
+				job := &jobs[i]
+				// Try to match with GCB job
+				// Appliance job has "Job_..." as JobID usually
+				if gcbData, ok := gcbJobs[job.JobID]; ok {
+					if job.TotalResourceSizeBytes == 0 && gcbData.TotalResourceSizeBytes > 0 {
+						job.TotalResourceSizeBytes = gcbData.TotalResourceSizeBytes
+						log.Printf("DEBUG: Enriched job %s with size %d from GCB", job.JobID, job.TotalResourceSizeBytes)
+					}
+					if job.GiBTransferred == 0 && gcbData.GiBTransferred > 0 {
+						job.GiBTransferred = gcbData.GiBTransferred
+						log.Printf("DEBUG: Enriched job %s with transferred %.2f GiB from GCB", job.JobID, job.GiBTransferred)
+					}
+				}
+			}
+
 			allApplianceJobs = filterJobs(jobs, filterName)
 			// Calculate stats
 			stats := a.calculateStatistics(allApplianceJobs, a.Days)
@@ -167,6 +199,49 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	allStats := append(result.VaultWorkloads.ResourceStats, result.ApplianceWorkloads.ResourceStats...)
 	result.DailyBaselines = calculateDailyBaselines(allJobs, result.Anomalies, allStats, a.Days)
 
+	// Calculate Summary Metrics
+	var totalSizeGB, dailyChangeGB, dailyChangePct float64
+	var zeroSizeVaultCount int
+
+	// Process stats for summary
+	for _, s := range allStats {
+		totalSizeGB += s.TotalResourceSizeGB
+		dailyChangeGB += s.CurrentDailyChangeGB
+		// Weighted percentage calculation could be complex, sticking to simple sum or avg? 
+        // Python likely does (total_daily_change / total_size) * 100
+	}
+    
+    if totalSizeGB > 0 {
+        dailyChangePct = (dailyChangeGB / totalSizeGB) * 100
+    }
+
+	// Count successful/failed jobs
+	var successCount, failCount int
+	for _, job := range allJobs {
+        // "Status" string could be "SUCCESSFUL", "FAILED", "PARTIAL_SUCCESS", etc.
+        // Normalize check
+		if strings.EqualFold(job.Status, "SUCCESSFUL") || strings.EqualFold(job.Status, "OK") {
+			successCount++
+		} else {
+			failCount++
+		}
+	}
+    
+    // Check zero size vault resources
+    for _, s := range result.VaultWorkloads.ResourceStats {
+        if s.TotalResourceSizeGB == 0 {
+            zeroSizeVaultCount++
+        }
+    }
+
+	result.Summary.TotalJobs = len(allJobs)
+	result.Summary.SuccessfulJobs = successCount
+	result.Summary.FailedJobs = failCount
+	result.Summary.TotalResourceSizeGB = totalSizeGB
+	result.Summary.CurrentDailyChangeGB = dailyChangeGB
+	result.Summary.CurrentDailyChangePct = dailyChangePct
+    result.Summary.ZeroSizeVaultCount = zeroSizeVaultCount
+    result.Summary.TotalVaultResourceCount = len(result.VaultWorkloads.ResourceStats)
 	result.Summary.AnomalyCount = len(result.Anomalies)
 	return result, nil
 }
@@ -273,6 +348,21 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		job.GiBTransferred = gib
 	}
 
+	// Helper to get float from map
+	getFloat := func(key string) (float64, bool) {
+		if v, ok := payload[key].(float64); ok {
+			return v, true
+		}
+		if v, ok := payload[key].(string); ok {
+			// Try parsing string as float
+			var f float64
+			if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+				return f, true
+			}
+		}
+		return 0, false
+	}
+
 	// Appliance specific overrides
 	if source == "appliance" {
 		// Job ID
@@ -307,19 +397,7 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 			foundBytes := false
 
 			// Helper to get float from map
-		getFloat := func(key string) (float64, bool) {
-			if v, ok := payload[key].(float64); ok {
-				return v, true
-			}
-			if v, ok := payload[key].(string); ok {
-				// Try parsing string as float
-				var f float64
-				if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
-					return f, true
-				}
-			}
-			return 0, false
-		}
+
 
 		if v, ok := getFloat("dataCopiedInBytes"); ok {
 			bytes = v
@@ -334,6 +412,34 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 
 		if foundBytes {
 			job.GiBTransferred = bytes / (1024 * 1024 * 1024)
+		}
+		if foundBytes {
+			job.GiBTransferred = bytes / (1024 * 1024 * 1024)
+		}
+	} else if source == "gcb" {
+		// GCB Job Logs Parsing
+		if name, ok := payload["job_name"].(string); ok {
+			job.JobID = name
+		}
+
+		// Size Parsing for GCB
+		// Priority: resource_data_size_in_gib > snapshot_disk_size_in_gib
+		var totalGib float64
+		if v, ok := getFloat("resource_data_size_in_gib"); ok {
+			totalGib = v
+		} else if v, ok := getFloat("snapshot_disk_size_in_gib"); ok {
+			totalGib = v
+		}
+
+		if totalGib > 0 {
+			job.TotalResourceSizeBytes = int64(totalGib * 1024 * 1024 * 1024)
+		}
+
+		// Transferred Parsing for GCB
+		if v, ok := getFloat("data_copied_in_gib"); ok {
+			job.GiBTransferred = v
+		} else if v, ok := getFloat("onvault_pool_storage_consumed_in_gib"); ok {
+			job.GiBTransferred = v
 		}
 	}
 
@@ -398,6 +504,28 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 
 	job.TotalResourceSizeBytes = totalBytes
 	return job
+}
+
+func (a *Analyzer) fetchAndParseGCBJobLogs(ctx context.Context) (map[string]JobData, error) {
+	filter := fmt.Sprintf(
+		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fgcb_backup_recovery_jobs" AND timestamp >= "%s"`,
+		a.ProjectID,
+		time.Now().AddDate(0, 0, -a.Days).Format(time.RFC3339),
+	)
+
+	// We use fetchLogs but need to process them into a map
+	jobs, err := a.fetchLogs(ctx, filter, "gcb")
+	if err != nil {
+		return nil, err
+	}
+
+	jobMap := make(map[string]JobData)
+	for _, job := range jobs {
+		if job.JobID != "" {
+			jobMap[job.JobID] = job
+		}
+	}
+	return jobMap, nil
 }
 
 func filterJobs(jobs []JobData, pattern string) []JobData {
