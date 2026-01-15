@@ -118,6 +118,7 @@ type Analyzer struct {
 	Days             int
 	WorkloadProjects []string
 	client           *logadmin.Client
+    DebugLog         []string
 }
 
 // New creates a new Analyzer.
@@ -147,13 +148,23 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
     }
     result.Summary.ProjectID = a.ProjectID
     
+    // Capture accumulated logs
+    defer func() {
+        result.DebugMessages = append(result.DebugMessages, a.DebugLog...)
+    }()
+    
     // Helper to add debug message
     addDebug := func(msg string) {
-        result.DebugMessages = append(result.DebugMessages, msg)
         log.Println(msg)
+        a.DebugLog = append(a.DebugLog, msg)
     }
 
-    addDebug(fmt.Sprintf("Starting analysis for project %s, source_type: %s", a.ProjectID, sourceType))
+    addDebug(fmt.Sprintf("Starting analysis for project %s, source_type: %v (sanitized)", a.ProjectID, sourceType))
+
+    // Warn if source_type looks wrong
+    if sourceType != "all" && sourceType != "vault" && sourceType != "appliance" {
+        addDebug(fmt.Sprintf("WARNING: Unknown source_type '%s', skipping logic blocks!", sourceType))
+    }
 
 	// Collect all jobs
 	var allVaultJobs, allApplianceJobs []JobData
@@ -288,7 +299,15 @@ func (a *Analyzer) fetchAndParseApplianceLogs(ctx context.Context) ([]JobData, e
 
 func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobData, error) {
 	var jobs []JobData
-	log.Printf("DEBUG: Querying logs with filter: %s", filter)
+    
+    // Helper for debug logging
+    debugLog := func(format string, v ...interface{}) {
+        msg := fmt.Sprintf(format, v...)
+        log.Println(msg)
+        a.DebugLog = append(a.DebugLog, msg)
+    }
+
+	debugLog("DEBUG: Querying logs with filter: %s", filter)
 	it := a.client.Entries(ctx, logadmin.Filter(filter))
 
     var entryCount int
@@ -308,14 +327,15 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 		}
 	}
 
-	log.Printf("Fetched %d %s jobs", len(jobs), source)
+	debugLog("Fetched %d %s jobs (iterated %d entries)", len(jobs), source, entryCount)
     
     // Diagnostic Probe if 0 jobs found for appliance/gcb
     if len(jobs) == 0 && (source == "appliance" || source == "gcb") {
-        log.Printf("DEBUG: 0 %s jobs found. Running diagnostic probe...", source)
+        debugLog("DEBUG: 0 %s jobs found. Running diagnostic probe...", source)
         
         // 1. Check LogName only (Limit 1)
         baseFilter := fmt.Sprintf(`logName="%s"`, strings.Split(filter, "\" AND")[0][9:]) // Rough extraction or just rebuild
+        // Rebuild safely
         if source == "appliance" {
              baseFilter = fmt.Sprintf(`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events"`, a.ProjectID)
         } else if source == "gcb" {
@@ -325,11 +345,11 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
         it := a.client.Entries(ctx, logadmin.Filter(baseFilter), logadmin.NewestFirst())
         _, err := it.Next()
         if err == iterator.Done {
-            log.Printf("DEBUG: Probe 1 (LogName only) returned NO entries. Check Project ID (%s) or Log Name.", a.ProjectID)
+            debugLog("DEBUG: Probe 1 (LogName only) returned NO entries. Check Project ID (%s) or Log Name.", a.ProjectID)
         } else if err == nil {
-            log.Printf("DEBUG: Probe 1 (LogName only) SUCCESS. LogName is correct.")
+            debugLog("DEBUG: Probe 1 (LogName only) SUCCESS. LogName is correct. Issue is likely the EventID filter.")
         } else {
-            log.Printf("DEBUG: Probe 1 failed with error: %v", err)
+            debugLog("DEBUG: Probe 1 failed with error: %v", err)
         }
     }
 

@@ -50,12 +50,12 @@ func handleAnalysis(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filterName := r.URL.Query().Get("filter_name")
-	sourceType := r.URL.Query().Get("source_type")
+	sourceType := strings.Trim(r.URL.Query().Get("source_type"), "\" ")
 	if sourceType == "" {
 		sourceType = "all"
 	}
 
-	outputFormat := strings.ToLower(r.URL.Query().Get("format"))
+	outputFormat := strings.ToLower(strings.Trim(r.URL.Query().Get("format"), "\" "))
 	if outputFormat == "" {
 		outputFormat = "json"
 	}
