@@ -163,7 +163,9 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 	}
 
 	allJobs := append(allVaultJobs, allApplianceJobs...)
-	result.DailyBaselines = calculateDailyBaselines(allJobs, result.Anomalies, a.Days)
+	// Combine stats for daily baseline calculation
+	allStats := append(result.VaultWorkloads.ResourceStats, result.ApplianceWorkloads.ResourceStats...)
+	result.DailyBaselines = calculateDailyBaselines(allJobs, result.Anomalies, allStats, a.Days)
 
 	result.Summary.AnomalyCount = len(result.Anomalies)
 	return result, nil
@@ -602,7 +604,7 @@ func detectAnomalies(jobs []JobData, stats []ResourceStats) []Anomaly {
 	return anomalies
 }
 
-func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, days int) []DailyBaseline {
+func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, stats []ResourceStats, days int) []DailyBaseline {
 	// 1. Group jobs by date
 	jobsByDate := make(map[string][]JobData)
 	for _, job := range jobs {
@@ -617,84 +619,116 @@ func calculateDailyBaselines(jobs []JobData, anomalies []Anomaly, days int) []Da
 		anomalyMap[key] += a.GiBTransferred
 	}
 
+	// Map enriched sizes from stats for fallback
+	enrichedSizeMap := make(map[string]int64)
+	for _, s := range stats {
+		if s.TotalResourceSizeGB > 0 {
+			enrichedSizeMap[s.ResourceName] = int64(s.TotalResourceSizeGB * 1024 * 1024 * 1024)
+		}
+	}
+
 	// 3. Process each day to calculate metrics
 	var baselines []DailyBaseline
-
-	// Track resources seen globally to detect "New" resources
-	// Note: In a stateless run, "New" is just "First seen in this period".
-	// To be more accurate, we'd need historical state, but this matches the Python logic's "seen_resources"
-	globalSeenResources := make(map[string]bool)
-
-	// Iterate through dates in chronological order
-
-
-	// Actually, let's just iterate over the dates present in the data, sorted.
 	var sortedDates []string
 	for d := range jobsByDate {
 		sortedDates = append(sortedDates, d)
 	}
 	sort.Strings(sortedDates)
 
+	// 0. Get first day resources (Baseline for "New")
+	firstDayResources := make(map[string]bool)
+	if len(sortedDates) > 0 {
+		firstDay := sortedDates[0]
+		for _, job := range jobsByDate[firstDay] {
+			firstDayResources[job.ResourceName] = true
+		}
+	}
+
+	// Track all resources seen so far (for "Deleted")
+	allSeenResources := make(map[string]bool)
+	for r := range firstDayResources {
+		allSeenResources[r] = true
+	}
+
+	// Evaluate each day
 	for _, date := range sortedDates {
 		daysJobs := jobsByDate[date]
 
-		var b DailyBaseline
-		b.Date = date
-		b.ResourceCount = len(daysJobs)
-
-		// Resources active today
 		todayResources := make(map[string]bool)
+		todayResourceSizes := make(map[string]int64)
+		var modifiedBytes int64
 
 		for _, job := range daysJobs {
-			// Modified Data
-			b.ModifiedDataGB += job.GiBTransferred
-
-			// Total Protected (Max of the day for that resource)
-			// Actually we sum the max size of each resource for that day
-
-			// Suspicious Data
-			key := fmt.Sprintf("%s:%s", date, job.ResourceName)
-			if _, isAnomaly := anomalyMap[key]; isAnomaly {
-				b.SuspiciousDataGB += job.GiBTransferred
-			}
-
 			todayResources[job.ResourceName] = true
 
-			// New Data/Resource
-			if !globalSeenResources[job.ResourceName] {
-				b.NewDataGB += job.GiBTransferred
-				b.NewResourceCount++
+			// Use job size if available, otherwise fallback to enriched size
+			size := job.TotalResourceSizeBytes
+			if size == 0 {
+				if enriched, ok := enrichedSizeMap[job.ResourceName]; ok {
+					size = enriched
+				}
+			}
+			if size > todayResourceSizes[job.ResourceName] {
+				todayResourceSizes[job.ResourceName] = size
 			}
 
-			// Mark as seen globally
-			globalSeenResources[job.ResourceName] = true
+			modifiedBytes += int64(job.GiBTransferred * 1024 * 1024 * 1024)
 		}
 
-		// To Calculate Total Protected GB: Sum of (Max TotalResourceSizeBytes per resource today)
-		// To Calculate Deleted: Resources seen globally BEFORE today, but NOT today.
-		// (This logic is tricky in a single pass of sorted dates.
-		//  Deleted usually means "Was active yesterday, not active today".
-		//  For this stateless version, "Deleted" might be hard to verify without looking ahead or knowing the full universe.
-		//  Let's roughly match Python: "deleted_data_gb" is often simplistic or requires comparing set(yesterday) - set(today).
-
-		// Let's implement a "Total Protected" calculation
-		// Group by resource for this day
-		resourceMaxSizes := make(map[string]int64)
-		for _, job := range daysJobs {
-			if job.TotalResourceSizeBytes > resourceMaxSizes[job.ResourceName] {
-				resourceMaxSizes[job.ResourceName] = job.TotalResourceSizeBytes
+		// Suspicious bytes (from anomalies on this date)
+		var suspiciousBytes int64
+		for _, a := range anomalies {
+			if a.Date == date {
+				suspiciousBytes += int64(a.GiBTransferred * 1024 * 1024 * 1024)
 			}
 		}
-		for _, size := range resourceMaxSizes {
-			b.TotalProtectedGB += float64(size) / (1024 * 1024 * 1024)
+
+		// New Data (compared to first day)
+		var newBytes int64
+		var newResourceCount int
+		for r := range todayResources {
+			if !firstDayResources[r] {
+				newBytes += todayResourceSizes[r]
+				newResourceCount++
+			}
 		}
 
-		// "Deleted" Logic (Simple version):
-		// If we had a list of "all active resources" from previous days, we check if they are missing today.
-		// But in a stateless list of jobs, "Deleted" is hard to distinguish from "Backup didn't run yet".
-		// We'll leave Deleted as 0 for now unless we implement complex day-over-day diffing.
+		// Deleted Data (seen before but not today)
+		var deletedBytes int64
+		var deletedResourceCount int
+		for r := range allSeenResources {
+			if !todayResources[r] {
+				// We need the size of the deleted resource.
+				// Best guess: use enriched size or 0
+				if size, ok := enrichedSizeMap[r]; ok {
+					deletedBytes += size
+				}
+				deletedResourceCount++
+			}
+		}
 
-		baselines = append(baselines, b)
+		// Total Protected (Sum of unique resources today)
+		var totalProtectedBytes int64
+		for _, size := range todayResourceSizes {
+			totalProtectedBytes += size
+		}
+
+		// Update allSeen
+		for r := range todayResources {
+			allSeenResources[r] = true
+		}
+
+		baselines = append(baselines, DailyBaseline{
+			Date:                 date,
+			ModifiedDataGB:       float64(modifiedBytes) / (1024 * 1024 * 1024),
+			NewDataGB:            float64(newBytes) / (1024 * 1024 * 1024),
+			DeletedDataGB:        float64(deletedBytes) / (1024 * 1024 * 1024),
+			SuspiciousDataGB:     float64(suspiciousBytes) / (1024 * 1024 * 1024),
+			TotalProtectedGB:     float64(totalProtectedBytes) / (1024 * 1024 * 1024),
+			ResourceCount:        len(todayResources),
+			NewResourceCount:     newResourceCount,
+			DeletedResourceCount: deletedResourceCount,
+		})
 	}
 
 	return baselines
