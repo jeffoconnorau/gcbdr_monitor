@@ -266,7 +266,7 @@ func (a *Analyzer) fetchAndParseVaultLogs(ctx context.Context) ([]JobData, error
 
 func (a *Analyzer) fetchAndParseApplianceLogs(ctx context.Context) ([]JobData, error) {
 	filter := fmt.Sprintf(
-		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId = (44003) AND timestamp >= "%s"`,
+		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId=44003 AND timestamp >= "%s"`,
 		a.ProjectID,
 		time.Now().AddDate(0, 0, -a.Days).Format(time.RFC3339),
 	)
@@ -296,6 +296,30 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 	}
 
 	log.Printf("Fetched %d %s jobs", len(jobs), source)
+    
+    // Diagnostic Probe if 0 jobs found for appliance/gcb
+    if len(jobs) == 0 && (source == "appliance" || source == "gcb") {
+        log.Printf("DEBUG: 0 %s jobs found. Running diagnostic probe...", source)
+        
+        // 1. Check LogName only (Limit 1)
+        baseFilter := fmt.Sprintf(`logName="%s"`, strings.Split(filter, "\" AND")[0][9:]) // Rough extraction or just rebuild
+        if source == "appliance" {
+             baseFilter = fmt.Sprintf(`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events"`, a.ProjectID)
+        } else if source == "gcb" {
+             baseFilter = fmt.Sprintf(`logName="projects/%s/logs/backupdr.googleapis.com%%2Fgcb_backup_recovery_jobs"`, a.ProjectID)
+        }
+        
+        it := a.client.Entries(ctx, logadmin.Filter(baseFilter), logadmin.NewestFirst())
+        _, err := it.Next()
+        if err == iterator.Done {
+            log.Printf("DEBUG: Probe 1 (LogName only) returned NO entries. Check Project ID (%s) or Log Name.", a.ProjectID)
+        } else if err == nil {
+            log.Printf("DEBUG: Probe 1 (LogName only) SUCCESS. LogName is correct.")
+        } else {
+            log.Printf("DEBUG: Probe 1 failed with error: %v", err)
+        }
+    }
+
 	return jobs, nil
 }
 
