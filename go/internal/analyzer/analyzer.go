@@ -488,9 +488,6 @@ func (a *Analyzer) calculateStatistics(jobs []JobData, days int) []ResourceStats
                     sizeBytes = a.fetchGCEDiskDetails(ctx, useProjectID, name)
                 } else if strings.Contains(resourceType, "cloud sql") {
                     sizeBytes = a.fetchCloudSQLDetails(ctx, useProjectID, name)
-                } else if strings.Contains(resourceType, "sql") {
-                    // "SQL Server" usually refers to GCE VMs running SQL
-                    sizeBytes = a.fetchGCEInstanceDetails(ctx, useProjectID, name)
                 }
                 
                 if sizeBytes > 0 {
