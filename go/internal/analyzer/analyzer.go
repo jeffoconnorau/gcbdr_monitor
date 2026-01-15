@@ -482,18 +482,32 @@ func parseLogEntry(entry *logging.Entry, source string) *JobData {
 		}
 	} else if source == "gcb" {
 		// GCB Job Logs Parsing
+        // Debug: Log keys for first GCB job to verify schema
+        if a.DebugLog != nil && len(a.DebugLog) < 20 { // Heuristic to log early only
+             keys := make([]string, 0, len(payload))
+             for k := range payload {
+                 keys = append(keys, k)
+             }
+             a.LogDebug("DEBUG: GCB Payload Keys: %v", keys)
+        }
+
 		if name, ok := payload["job_name"].(string); ok {
 			job.JobID = name
 		}
 
 		// Size Parsing for GCB
 		// Priority: resource_data_size_in_gib > snapshot_disk_size_in_gib
+        // Also check camelCase variants just in case
 		var totalGib float64
 		if v, ok := getFloat("resource_data_size_in_gib"); ok {
 			totalGib = v
-		} else if v, ok := getFloat("snapshot_disk_size_in_gib"); ok {
+		} else if v, ok := getFloat("resourceDataSizeInGib"); ok {
+            totalGib = v
+        } else if v, ok := getFloat("snapshot_disk_size_in_gib"); ok {
 			totalGib = v
-		}
+		} else if v, ok := getFloat("snapshotDiskSizeInGib"); ok {
+            totalGib = v
+        }
 
 		if totalGib > 0 {
 			job.TotalResourceSizeBytes = int64(totalGib * 1024 * 1024 * 1024)
