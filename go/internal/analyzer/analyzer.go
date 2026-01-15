@@ -121,6 +121,12 @@ type Analyzer struct {
     DebugLog         []string
 }
 
+func (a *Analyzer) LogDebug(format string, v ...interface{}) {
+    msg := fmt.Sprintf(format, v...)
+    log.Println(msg)
+    a.DebugLog = append(a.DebugLog, msg)
+}
+
 // New creates a new Analyzer.
 func New(projectID string, days int, workloadProjects []string) (*Analyzer, error) {
 	ctx := context.Background()
@@ -153,17 +159,11 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
         result.DebugMessages = append(result.DebugMessages, a.DebugLog...)
     }()
     
-    // Helper to add debug message
-    addDebug := func(msg string) {
-        log.Println(msg)
-        a.DebugLog = append(a.DebugLog, msg)
-    }
-
-    addDebug(fmt.Sprintf("Starting analysis for project %s, source_type: %v (sanitized)", a.ProjectID, sourceType))
+    a.LogDebug(fmt.Sprintf("Starting analysis for project %s, source_type: %v (sanitized)", a.ProjectID, sourceType))
 
     // Warn if source_type looks wrong
     if sourceType != "all" && sourceType != "vault" && sourceType != "appliance" {
-        addDebug(fmt.Sprintf("WARNING: Unknown source_type '%s', skipping logic blocks!", sourceType))
+        a.LogDebug(fmt.Sprintf("WARNING: Unknown source_type '%s', skipping logic blocks!", sourceType))
     }
 
 	// Collect all jobs
@@ -199,21 +199,22 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 				if gcbData, ok := gcbJobs[job.JobID]; ok {
 					if job.TotalResourceSizeBytes == 0 && gcbData.TotalResourceSizeBytes > 0 {
 						job.TotalResourceSizeBytes = gcbData.TotalResourceSizeBytes
-						log.Printf("DEBUG: Enriched job %s with size %d from GCB", job.JobID, job.TotalResourceSizeBytes)
+						job.TotalResourceSizeBytes = gcbData.TotalResourceSizeBytes
+						a.LogDebug("DEBUG: Enriched job %s with size %d from GCB", job.JobID, job.TotalResourceSizeBytes)
                         enrichedCount++
 					}
 					if job.GiBTransferred == 0 && gcbData.GiBTransferred > 0 {
 						job.GiBTransferred = gcbData.GiBTransferred
-						log.Printf("DEBUG: Enriched job %s with transferred %.2f GiB from GCB", job.JobID, job.GiBTransferred)
+						a.LogDebug("DEBUG: Enriched job %s with transferred %.2f GiB from GCB", job.JobID, job.GiBTransferred)
 					}
 				} else {
                     if missingCount < 5 {
-                        log.Printf("DEBUG: No GCB Match for Appliance Job: %s", job.JobID)
+                        a.LogDebug("DEBUG: No GCB Match for Appliance Job: %s", job.JobID)
                         missingCount++
                     }
                 }
 			}
-            log.Printf("DEBUG: Enriched %d appliance jobs with GCB data", enrichedCount)
+            a.LogDebug("DEBUG: Enriched %d appliance jobs with GCB data", enrichedCount)
 
 			allApplianceJobs = filterJobs(jobs, filterName)
 			// Calculate stats
@@ -223,7 +224,7 @@ func (a *Analyzer) Analyze(ctx context.Context, filterName, sourceType string) (
 			anomalies := detectAnomalies(allApplianceJobs, stats)
 			result.Anomalies = append(result.Anomalies, anomalies...)
 		} else {
-			log.Printf("Warning: failed to fetch appliance logs: %v", err)
+			a.LogDebug("Warning: failed to fetch appliance logs: %v", err)
 		}
 	}
 
@@ -300,14 +301,7 @@ func (a *Analyzer) fetchAndParseApplianceLogs(ctx context.Context) ([]JobData, e
 func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobData, error) {
 	var jobs []JobData
     
-    // Helper for debug logging
-    debugLog := func(format string, v ...interface{}) {
-        msg := fmt.Sprintf(format, v...)
-        log.Println(msg)
-        a.DebugLog = append(a.DebugLog, msg)
-    }
-
-	debugLog("DEBUG: Querying logs with filter: %s", filter)
+	a.LogDebug("DEBUG: Querying logs with filter: %s", filter)
 	it := a.client.Entries(ctx, logadmin.Filter(filter))
 
     var entryCount int
@@ -327,11 +321,11 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 		}
 	}
 
-	debugLog("Fetched %d %s jobs (iterated %d entries)", len(jobs), source, entryCount)
+	a.LogDebug("Fetched %d %s jobs (iterated %d entries)", len(jobs), source, entryCount)
     
     // Diagnostic Probe if 0 jobs found for appliance/gcb
     if len(jobs) == 0 && (source == "appliance" || source == "gcb") {
-        debugLog("DEBUG: 0 %s jobs found. Running diagnostic probe...", source)
+        a.LogDebug("DEBUG: 0 %s jobs found. Running diagnostic probe...", source)
         
         // 1. Check LogName only (Limit 1)
         baseFilter := fmt.Sprintf(`logName="%s"`, strings.Split(filter, "\" AND")[0][9:]) // Rough extraction or just rebuild
@@ -345,11 +339,11 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
         it := a.client.Entries(ctx, logadmin.Filter(baseFilter), logadmin.NewestFirst())
         _, err := it.Next()
         if err == iterator.Done {
-            debugLog("DEBUG: Probe 1 (LogName only) returned NO entries. Check Project ID (%s) or Log Name.", a.ProjectID)
+            a.LogDebug("DEBUG: Probe 1 (LogName only) returned NO entries. Check Project ID (%s) or Log Name.", a.ProjectID)
         } else if err == nil {
-            debugLog("DEBUG: Probe 1 (LogName only) SUCCESS. LogName is correct. Issue is likely the EventID filter.")
+            a.LogDebug("DEBUG: Probe 1 (LogName only) SUCCESS. LogName is correct. Issue is likely the EventID filter.")
         } else {
-            debugLog("DEBUG: Probe 1 failed with error: %v", err)
+            a.LogDebug("DEBUG: Probe 1 failed with error: %v", err)
         }
     }
 
@@ -596,12 +590,12 @@ func (a *Analyzer) fetchAndParseGCBJobLogs(ctx context.Context) (map[string]JobD
 		if job.JobID != "" {
 			jobMap[job.JobID] = job
             if count < 5 {
-                log.Printf("DEBUG: GCB Job found: %s, Size: %d", job.JobID, job.TotalResourceSizeBytes)
+                a.LogDebug("DEBUG: GCB Job found: %s, Size: %d", job.JobID, job.TotalResourceSizeBytes)
                 count++
             }
 		}
 	}
-    log.Printf("DEBUG: Created GCB Job Map with %d entries", len(jobMap))
+    a.LogDebug("DEBUG: Created GCB Job Map with %d entries", len(jobMap))
 	return jobMap, nil
 }
 
