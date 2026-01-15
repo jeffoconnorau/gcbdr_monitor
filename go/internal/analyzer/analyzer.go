@@ -266,7 +266,7 @@ func (a *Analyzer) fetchAndParseVaultLogs(ctx context.Context) ([]JobData, error
 
 func (a *Analyzer) fetchAndParseApplianceLogs(ctx context.Context) ([]JobData, error) {
 	filter := fmt.Sprintf(
-		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId="44003" AND timestamp >= "%s"`,
+		`logName="projects/%s/logs/backupdr.googleapis.com%%2Fbackup_recovery_appliance_events" AND jsonPayload.eventId = (44003) AND timestamp >= "%s"`,
 		a.ProjectID,
 		time.Now().AddDate(0, 0, -a.Days).Format(time.RFC3339),
 	)
@@ -278,7 +278,9 @@ func (a *Analyzer) fetchLogs(ctx context.Context, filter, source string) ([]JobD
 	log.Printf("DEBUG: Querying logs with filter: %s", filter)
 	it := a.client.Entries(ctx, logadmin.Filter(filter))
 
+    var entryCount int
 	for {
+        entryCount++
 		entry, err := it.Next()
 		if err == iterator.Done {
 			break

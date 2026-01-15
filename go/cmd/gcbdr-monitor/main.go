@@ -133,4 +133,5 @@ func handleAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Write(output)
+	log.Println("Analysis finished successfully")
 }
